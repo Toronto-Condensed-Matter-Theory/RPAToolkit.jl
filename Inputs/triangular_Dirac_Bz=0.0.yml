@@ -33,4 +33,4 @@ k_labels:
   - "\\Gamma"
   - "X"
   - "M"
-interactions: "../saves/interactions/triangular_Jxxz.jld2"
+interactions: "../saves/interactions/triangular_J1J2.jld2"
