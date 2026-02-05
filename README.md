@@ -2,7 +2,7 @@
 Codebase to calculate bare susceptiblity of a lattice model (using TRIQS), and then perform general random phase approximation (RPA) on it to get instabilities of the model.
 
 ## Installation
-- Install the [triqs_tprf](https://triqs.github.io/tprf/2.1.x/install.html) package in a python venv (with default name "triqs"). Note: triqs_tprf does not work on Windows currently.
+- Install the [triqs_tprf](https://triqs.github.io/tprf/2.1.x/install.html) package in a python venv (with default name "triqs"). Requires a TRIQS install. On Ubuntu there are precompiled packages. Otherwise this requires compilation described [here](https://triqs.github.io/triqs/3.3.x/install.html). 
 - Add the julia repo locally in Package mode.
 
 ## Usage
