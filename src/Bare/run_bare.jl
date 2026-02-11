@@ -17,8 +17,8 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    include("../RPA.jl")
-    using .RPA
+    include("../RPAToolbox.jl")
+    using .RPAToolbox
 
     parsed_args = parse_commandline()
     input = YAML.load_file(parsed_args["input"])
@@ -34,10 +34,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     input["unitcell"]["triqs"] = triqs_input
     YAML.write_file(parsed_args["input"], input)
 
-    command = `conda run -n $(input["triqs_environment"]) python ./Bare/run_bare.py $(parsed_args["input"])`
+    command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(parsed_args["input"])`
     run(command)
 
-    command = `conda run -n $(input["triqs_environment"]) python ./Bare/plot_bare.py $(parsed_args["input"])`
+    command = `$(input["triqs_environment"]) $(@__DIR__)/plot_bare.py $(parsed_args["input"])`
     run(command)
 
 end

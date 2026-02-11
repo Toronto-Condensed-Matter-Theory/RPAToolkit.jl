@@ -1,8 +1,8 @@
 module Plotting
 
 using LinearAlgebra, Plots, LaTeXStrings
-using ..RPA.Interactions: interaction
-using ..RPA.Response: perform_RPA
+using ..RPAToolbox.Interactions: interaction
+using ..RPAToolbox.Response: perform_RPA
 
 export plot_chi, plot_strengthsVsN, plot_QsVsN
 

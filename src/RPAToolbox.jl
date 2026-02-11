@@ -1,4 +1,4 @@
-module RPA
+module RPAToolbox
 
 # Write your package code here.
 include("./Bare/parse_model.jl")

@@ -1,7 +1,7 @@
 module Response
 
 using LinearAlgebra
-using ..RPA.Interactions: interaction
+using ..RPAToolbox.Interactions: interaction
 
 export perform_RPA, minima, maxima, find_instability
 
