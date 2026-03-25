@@ -42,6 +42,13 @@ function npz_path_labels(triqs_data)
     return path_labels
 end
 
+function get_instability_range(input)
+    instability_input = get(input, "instability", Dict{Any, Any}())
+    lower = Float64(get(instability_input, "lower", 0.0))
+    upper = Float64(get(instability_input, "upper", 10.0))
+    return lower, upper
+end
+
 function get_strength_range(input)
     strengths_input = get(input, "strengths", Dict{Any, Any}())
     lower = Float64(get(strengths_input, "lower", 0.0))
@@ -116,6 +123,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     input = YAML.load_file(parsed_args["input"])
     #####* plot labels for k-space plots of bands and susceptibility
     input_path_labels = default_path_labels(input)
+    instability_lower, instability_upper = get_instability_range(input)
     strengths_lower, strengths_upper, strengths_n = get_strength_range(input)
 
     CombinedOutput = Dict()
@@ -152,8 +160,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
             instability = find_instability(chis, ks; primitives = primitives,
                 subs = subs, localDim=localDim,
                 lookup = lookup,
-                lower=strengths_lower,
-                upper=strengths_upper,)
+                lower=instability_lower,
+                upper=instability_upper,)
 
             critical = instability["critical strength"]
             println("Critical interaction strength for $(label) is approximately $(round(critical, digits=3)).")

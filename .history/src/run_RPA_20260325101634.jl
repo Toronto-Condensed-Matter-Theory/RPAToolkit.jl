@@ -42,14 +42,6 @@ function npz_path_labels(triqs_data)
     return path_labels
 end
 
-function get_strength_range(input)
-    strengths_input = get(input, "strengths", Dict{Any, Any}())
-    lower = Float64(get(strengths_input, "lower", 0.0))
-    upper = Float64(get(strengths_input, "upper", 10.0))
-    n = Int(get(strengths_input, "n", 6))
-    return lower, upper, n
-end
-
 function parse_commandline()
 
     settings = ArgParseSettings()
@@ -98,7 +90,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     #####* Reading interaction data from file : parameters and different values to run RPA on
     interaction_data = load(input["interactions"])
     interaction_params = interaction_data["parameters"]
-    interaction_cases = interaction_data["values"]
+    interaction_values = interaction_data["values"]
 
     #####* running the bare susceptibility calculation in TRIQS if needed
     if parsed_args["run_bare"]
@@ -116,7 +108,6 @@ if abspath(PROGRAM_FILE) == @__FILE__
     input = YAML.load_file(parsed_args["input"])
     #####* plot labels for k-space plots of bands and susceptibility
     input_path_labels = default_path_labels(input)
-    strengths_lower, strengths_upper, strengths_n = get_strength_range(input)
 
     CombinedOutput = Dict()
 
@@ -140,7 +131,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         CombinedOutput[parent_label]["combined_chis"] = chis
 
         println("Starting RPA...")
-        for (label, value) in interaction_cases
+        for (label, value) in interaction_values
             #####* setting the interaction values
             push!.(getproperty.(interaction_params, :value), value)
             lookup = Lookup(interaction_params)
@@ -152,20 +143,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
             instability = find_instability(chis, ks; primitives = primitives,
                 subs = subs, localDim=localDim,
                 lookup = lookup,
-                lower=strengths_lower,
-                upper=strengths_upper,)
+                upper=20.0,)
 
             critical = instability["critical strength"]
-            println("Critical interaction strength for $(label) is approximately $(round(critical, digits=3)).")
-            candidate_strengths = collect(LinRange(strengths_lower, strengths_upper, strengths_n))
-            strengths = [strength for strength in candidate_strengths if strength <= critical]
+            strengths = collect(LinRange(0.0, 0.99*critical, 6))[2:end]
 
             if parsed_args["plot_RPA"]
                 println("Plotting RPA for $(label)...")
-
-                if isempty(strengths)
-                    println("No plotting strengths are <= critical for $(label). Check strengths range in input.")
-                end
 
                 for strength in strengths
                     p = plot_chi(chis, strength, ks; primitives = primitives,
