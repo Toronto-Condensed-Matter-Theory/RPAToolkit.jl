@@ -8,7 +8,7 @@ export perform_RPA, minima, maxima, find_instability
 #####* Returns the eigenvalues and eigenvectors of the RPA susceptibility matrix at some fixed momentum.
 function perform_RPA(chi::Matrix{ComplexF64}, interaction::Matrix{ComplexF64} ;
         return_matrix::Bool = false)
-    mat = inv(I + chi * interaction) * chi
+    mat = inv(I - chi * interaction) * chi
 
     if return_matrix
         return mat
