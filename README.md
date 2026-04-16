@@ -15,7 +15,7 @@ Some examples are given in [./examples/models](https://github.com/andrewkhardy/R
  Refer to [./Inputs](https://github.com/andrewkhardy/RPAToolkit.jl/tree/main/Inputs) for formatting.
 - Run the following command
   ```julia
-  julia --project=../Project.toml --heap-size-hint=4G --input="../Inputs/name_of_input.yml" --run_bare=true
+  julia --project=../Project.toml --heap-size-hint=4G run_RPA.jl --input="../Inputs/name_of_input.yml" --run_bare=true
   ```
 
 ## Input Notes
