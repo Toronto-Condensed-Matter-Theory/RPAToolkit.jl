@@ -8,11 +8,11 @@ Otherwise this requires compilation described [here](https://triqs.github.io/tri
 - Add the julia repo locally in Package mode.
 
 ## Usage
-- Create the free Hamiltonian first. This is done using the [TightBindingToolbox.jl](https://github.com/andrewkhardy/TightBindingToolbox.jl) interface. 
-Some examples are given in [./examples/models](https://github.com/andrewkhardy/RPAToolbox.jl//main/examples/models).
-- Define the interactions which are to be used for the RPA. This can also done in the same interface, with examples given in [./examples/interactions](https://github.com/andrewkhardy/RPAToolkit.jl/tree/main/examples/interactions).
+- Create the free Hamiltonian first. This is done using the [TightBindingToolkit.jl](https://github.com/Toronto-Condensed-Matter-Theory/TightBindingToolkit.jl) interface. 
+Some examples are given in [./examples/models](https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl//main/examples/models).
+- Define the interactions which are to be used for the RPA. This can also done in the same interface, with examples given in [./examples/interactions](https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl/tree/main/examples/interactions).
 - Write a parent input file with details of parameters required for the calculation such as the inverse temperature, number of k-points, and number of matsubara frequencies.
- Refer to [./Inputs](https://github.com/andrewkhardy/RPAToolkit.jl/tree/main/Inputs) for formatting.
+ Refer to [./Inputs](https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl/tree/main/Inputs) for formatting.
 - Run the following command
   ```julia
   julia --project=../Project.toml --heap-size-hint=4G --input="../Inputs/name_of_input.yml" --run_bare=true

@@ -2,6 +2,9 @@ import numpy as np
 import yaml
 from matplotlib import pyplot as plt
 import argparse
+import glob
+import os
+import re
 
 labels = {0 : "chi_NN", 1 : "chi_XX", 2 : "chi_YY", 3 : "chi_ZZ", 4 : "chi_NN"}
 titles = {0 : r'$\chi_{dd}(\mathbf{Q}, \Omega=0)$', 
@@ -32,6 +35,29 @@ def format_path_labels(raw_labels):
     return formatted
 
 
+def discover_mus_from_outputs(output_prefix: str, beta: float):
+    pattern = f"{output_prefix}_beta={beta}_mu=*.npz"
+    files = glob.glob(pattern)
+    mu_regex = re.compile(r"_mu=([-+0-9.eE]+)\\.npz$")
+
+    mus = []
+    for file_name in files:
+        match = mu_regex.search(file_name)
+        if match is None:
+            continue
+        mus.append(float(match.group(1)))
+
+    mus = sorted(set(mus))
+    if len(mus) == 0:
+        raise ValueError(
+            "Could not determine mu values from YAML or output files. "
+            f"Expected files matching: {pattern}"
+        )
+
+    return mus
+
+
+
 if __name__=="__main__":
     
     #####* defining the command line arguments to parse
@@ -52,9 +78,10 @@ if __name__=="__main__":
     #####* fillings vs chemical potential
     beta = params["beta"]
     outDirectory = params["output"]
-    if "mus" not in params or "values" not in params["mus"]:
-        raise ValueError("plot_bare.py requires mus.values in the provided input file.")
-    mus = params["mus"]["values"]
+    if "mus" in params and "values" in params["mus"]:
+        mus = params["mus"]["values"]
+    else:
+        mus = discover_mus_from_outputs(outDirectory, beta)
 
     plotDirectory = params["plots"]
     

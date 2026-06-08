@@ -75,8 +75,8 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    include("../RPAToolkit.jl")
-    using .RPAToolkit
+    include("../RPAToolbox.jl")
+    using .RPAToolbox
 
     parsed_args = parse_commandline()
     input = YAML.load_file(parsed_args["input"])

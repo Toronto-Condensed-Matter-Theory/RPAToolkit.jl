@@ -87,18 +87,6 @@ if __name__=="__main__":
     w_max = float(params.get("w_max", 20.0))
     dlr_err = float(params.get("dlr_err", 1e-12))
     mus, fillings = resolve_scan_values(params, beta, hamiltonian, kmesh, bandwidth)
-
-    # Persist resolved scan values to the runtime input file used in this run.
-    # run_bare.jl passes a temporary YAML, so the user input file is not modified.
-    params.setdefault("mus", {})
-    params["mus"]["values"] = [float(mu) for mu in mus]
-    params["mus"]["n"] = int(len(mus))
-    params.setdefault("fillings", {})
-    params["fillings"]["values"] = [float(val) for val in fillings]
-    params["fillings"]["n"] = int(len(fillings))
-
-    with open(args.input, 'w') as file:
-        yaml.dump(params, file)
     
     print("Starting TRIQS calculations...")
     

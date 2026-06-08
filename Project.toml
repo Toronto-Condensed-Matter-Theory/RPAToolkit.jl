@@ -1,7 +1,7 @@
 name = "RPA"
 uuid = "b283929e-e2c3-445a-a93e-21ce7c83cc79"
-authors = ["Anjishnu Bose"]
 version = "1.0.0-DEV"
+authors = ["Anjishnu Bose, Andrew Hardy"]
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
@@ -14,7 +14,8 @@ TightBindingToolkit = "2233325a-6eb3-486f-aff0-670e0939fa7e"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 
 [compat]
-julia = "1.6.7"
+TightBindingToolkit = "3.0.0"
+julia = "1.12.0"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

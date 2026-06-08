@@ -11,15 +11,6 @@ function _normalize_kpoint_coordinates(point)
     error("Each k-point must have length 2 or 3, got length $(length(values)).")
 end
 
-function _canonical_high_symmetry_label(label::AbstractString)
-    aliases = Dict(
-        "G" => "G", "Gamma" => "G", "\\Gamma" => "G", "Γ" => "G",
-        "K1" => "K1", "K_1" => "K1",
-        "M2" => "M2", "M_2" => "M2",
-    )
-    return get(aliases, String(label), String(label))
-end
-
 function _reciprocal_basis_matrix(unitcell)
     a1 = Float64.(unitcell.primitives[1])
     a2 = Float64.(unitcell.primitives[2])
@@ -43,12 +34,11 @@ function resolve_k_points!(input, unitcell)
     resolved = Any[]
     for point in input["k_points"]
         if point isa AbstractString
-            label = _canonical_high_symmetry_label(point)
-            if !haskey(bz.HighSymPoints, label)
+            if !haskey(bz.HighSymPoints, point)
                 available = join(sort(collect(keys(bz.HighSymPoints))), ", ")
                 error("Unknown HighSymPoint '$(point)'. Available points: $(available)")
             end
-            reduced = _cartesian_to_reduced(bz.HighSymPoints[label], reciprocal_basis)
+            reduced = _cartesian_to_reduced(bz.HighSymPoints[point], reciprocal_basis)
             push!(resolved, _normalize_kpoint_coordinates(reduced))
         else
             push!(resolved, _normalize_kpoint_coordinates(point))
@@ -75,12 +65,11 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    include("../RPAToolkit.jl")
-    using .RPAToolkit
+    include("../RPAToolbox.jl")
+    using .RPAToolbox
 
     parsed_args = parse_commandline()
     input = YAML.load_file(parsed_args["input"])
-    runtime_input = deepcopy(input)
 
     model = load(input["unitcell"]["julia"])
 
@@ -88,22 +77,17 @@ if abspath(PROGRAM_FILE) == @__FILE__
     parameters = model["parameters"]
     triqs_input = input["unitcell"]["julia"][1:end-5] * ".npz"
 
-    resolve_k_points!(runtime_input, unitcell)
+    resolve_k_points!(input, unitcell)
 
     parse_unitcell(unitcell, triqs_input)
 
-    runtime_input["unitcell"]["triqs"] = triqs_input
+    input["unitcell"]["triqs"] = triqs_input
+    YAML.write_file(parsed_args["input"], input)
 
-    output_target = String(get(runtime_input, "output", dirname(parsed_args["input"])))
-    runtime_dir = (endswith(output_target, "/") || isdir(output_target)) ? output_target : dirname(output_target)
-    mkpath(runtime_dir)
-    runtime_input_file = joinpath(runtime_dir, "_runtime_input.yml")
-    YAML.write_file(runtime_input_file, runtime_input)
-
-    command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(runtime_input_file)`
+    command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(parsed_args["input"])`
     run(command)
 
-    command = `$(input["triqs_environment"]) $(@__DIR__)/plot_bare.py $(runtime_input_file)`
+    command = `$(input["triqs_environment"]) $(@__DIR__)/plot_bare.py $(parsed_args["input"])`
     run(command)
 
 end

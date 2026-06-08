@@ -75,8 +75,8 @@ end
 
 if abspath(PROGRAM_FILE) == @__FILE__
 
-    include("../RPAToolkit.jl")
-    using .RPAToolkit
+    include("../RPAToolbox.jl")
+    using .RPAToolbox
 
     parsed_args = parse_commandline()
     input = YAML.load_file(parsed_args["input"])
@@ -94,16 +94,18 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     runtime_input["unitcell"]["triqs"] = triqs_input
 
-    output_target = String(get(runtime_input, "output", dirname(parsed_args["input"])))
-    runtime_dir = (endswith(output_target, "/") || isdir(output_target)) ? output_target : dirname(output_target)
-    mkpath(runtime_dir)
-    runtime_input_file = joinpath(runtime_dir, "_runtime_input.yml")
-    YAML.write_file(runtime_input_file, runtime_input)
+    (temp_io, temp_input_file) = mktemp(suffix = ".yml")
+    close(temp_io)
+    YAML.write_file(temp_input_file, runtime_input)
 
-    command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(runtime_input_file)`
-    run(command)
+    try
+        command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(temp_input_file)`
+        run(command)
 
-    command = `$(input["triqs_environment"]) $(@__DIR__)/plot_bare.py $(runtime_input_file)`
-    run(command)
+        command = `$(input["triqs_environment"]) $(@__DIR__)/plot_bare.py $(temp_input_file)`
+        run(command)
+    finally
+        rm(temp_input_file; force = true)
+    end
 
 end

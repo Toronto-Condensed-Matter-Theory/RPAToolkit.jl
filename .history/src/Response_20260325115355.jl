@@ -1,9 +1,9 @@
 module Response
 
 using LinearAlgebra
-using ..RPAToolkit.Interactions: interaction
+using ..RPAToolbox.Interactions: interaction
 
-export perform_RPA, minima, maxima, find_instability, effective_interaction
+export perform_RPA, minima, maxima, find_instability
 
 #####* Returns the eigenvalues and eigenvectors of the RPA susceptibility matrix at some fixed momentum.
 function perform_RPA(chi::Matrix{ComplexF64}, interaction::Matrix{ComplexF64} ;
@@ -26,16 +26,6 @@ end
 function perform_RPA(chis::Vector{Matrix{ComplexF64}}, interactions::Vector{Matrix{ComplexF64}} ;
         return_matrix::Bool = false)
     return perform_RPA.(chis, interactions ; return_matrix = return_matrix)
-end
-
-#####* Returns the RPA renormalized interaction V_eff(q) = V(q) + V(q) chi_RPA(q) V(q)
-function effective_interaction(chi_bare::Matrix{ComplexF64}, interaction::Matrix{ComplexF64})
-    chi_rpa = perform_RPA(chi_bare, interaction; return_matrix = true)
-    return interaction + interaction * chi_rpa * interaction
-end
-
-function effective_interaction(chis_bare::Vector{Matrix{ComplexF64}}, interactions::Vector{Matrix{ComplexF64}})
-    return effective_interaction.(chis_bare, interactions)
 end
 
 #####* returns the eigenvalue and eigenvector corresponding to the minimum eigenvalue over all momenta.

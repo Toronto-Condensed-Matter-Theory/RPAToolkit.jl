@@ -1,9 +1,32 @@
 using ArgParse, JLD2, TightBindingToolkit, YAML, NPZ, LaTeXStrings, Plots
 
-function runtime_input_path(input)
-    output_target = String(input["output"])
-    output_dir = (endswith(output_target, "/") || isdir(output_target)) ? output_target : dirname(output_target)
-    return joinpath(output_dir, "_runtime_input.yml")
+function discover_mus_from_outputs(input)
+    output_prefix = String(input["output"])
+    beta_label = string(input["beta"])
+
+    output_dir = dirname(output_prefix)
+    output_base = basename(output_prefix)
+    prefix = output_base * "_beta=" * beta_label * "_mu="
+
+    if !isdir(output_dir)
+        return Float64[]
+    end
+
+    mus = Float64[]
+    for file_name in readdir(output_dir)
+        if !startswith(file_name, prefix) || !endswith(file_name, ".npz")
+            continue
+        end
+
+        mu_str = file_name[length(prefix)+1:end-4]
+        mu_val = tryparse(Float64, mu_str)
+        if mu_val !== nothing
+            push!(mus, mu_val)
+        end
+    end
+
+    sort!(mus)
+    return unique(mus)
 end
 
 function get_mu_values(input)
@@ -11,15 +34,16 @@ function get_mu_values(input)
         return input["mus"]["values"]
     end
 
-    runtime_file = runtime_input_path(input)
-    if isfile(runtime_file)
-        runtime_input = YAML.load_file(runtime_file)
-        if haskey(runtime_input, "mus") && haskey(runtime_input["mus"], "values")
-            return runtime_input["mus"]["values"]
-        end
+    discovered = discover_mus_from_outputs(input)
+    if !isempty(discovered)
+        return discovered
     end
 
-    error("No mu values found in input mus.values or in runtime file $(runtime_file).")
+    if haskey(input, "fillings")
+        error("Input defines fillings but no mus.values and no matching output files were found. Run bare stage first.")
+    end
+
+    error("Input must define mus.values, or output files must exist so mu values can be discovered.")
 end
 
 function default_path_labels(input)
@@ -123,6 +147,9 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
         command = `julia --project=../Project.toml ./Bare/run_bare.jl --input=$(parsed_args["input"])`
         run(command)
+        input = YAML.load_file(parsed_args["input"])
+        command = `conda run -n $(input["triqs_environment"]) python ./Bare/plot_bare.py $(parsed_args["input"])`
+        run(command)
 
         println("Bare susceptibility calculation complete!")
     end
@@ -174,7 +201,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
             println("Critical interaction strength for $(label) is approximately $(round(critical, digits=3)).")
             candidate_strengths = collect(LinRange(strengths_lower, strengths_upper, strengths_n))
             strengths = [strength for strength in candidate_strengths if strength <= critical]
-            println("strengths to be plotted for $(label) are: $(strengths)")
+
             if parsed_args["plot_RPA"]
                 println("Plotting RPA for $(label)...")
 

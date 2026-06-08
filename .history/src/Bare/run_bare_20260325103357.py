@@ -19,6 +19,10 @@ def resolve_scan_values(params: dict, beta: float, hamiltonian, kmesh, bwidth: t
             raise ValueError("fillings must define either values or min/max/n.")
 
         mus = mdl.mus_from_fillings(fillings, beta, hamiltonian, kmesh)
+        params["fillings"]["values"] = fillings.tolist()
+        params.setdefault("mus", {})
+        params["mus"]["values"] = mus.tolist()
+        params["mus"]["n"] = int(len(mus))
         return mus, fillings
 
     if "mus" not in params:
@@ -28,11 +32,16 @@ def resolve_scan_values(params: dict, beta: float, hamiltonian, kmesh, bwidth: t
         mus = np.asarray(params["mus"]["values"], dtype=float)
     elif "n" in params["mus"]:
         mus = np.linspace(*bwidth, int(params["mus"]["n"]))
+        params["mus"]["values"] = mus.tolist()
     else:
         raise ValueError("mus must define either values or n.")
 
     band = mdl.bands(hamiltonian, kmesh)
     fillings = np.array([mdl.filling(band, beta, float(mu)) for mu in mus], dtype=float)
+    params["fillings"] = {
+        "values": fillings.tolist(),
+        "n": int(len(fillings)),
+    }
 
     return mus, fillings
 
@@ -73,7 +82,8 @@ if __name__=="__main__":
     if len(k_point_labels) != len(resolved_k_points):
         raise ValueError("k_points_labels length must match number of k_points.")
 
-    k_point_labels = [str(label) for label in k_point_labels]
+    params["k_points_labels"] = [str(label) for label in k_point_labels]
+    params["k_labels"] = [str(label) for label in k_point_labels]
     path_vecs, path_plot, path_ticks = mdl.k_path(model, resolved_k_points)
     
     #####* building the hamiltonian
@@ -86,16 +96,9 @@ if __name__=="__main__":
     beta = params["beta"]
     w_max = float(params.get("w_max", 20.0))
     dlr_err = float(params.get("dlr_err", 1e-12))
+    params["w_max"] = w_max
+    params["dlr_err"] = dlr_err
     mus, fillings = resolve_scan_values(params, beta, hamiltonian, kmesh, bandwidth)
-
-    # Persist resolved scan values to the runtime input file used in this run.
-    # run_bare.jl passes a temporary YAML, so the user input file is not modified.
-    params.setdefault("mus", {})
-    params["mus"]["values"] = [float(mu) for mu in mus]
-    params["mus"]["n"] = int(len(mus))
-    params.setdefault("fillings", {})
-    params["fillings"]["values"] = [float(val) for val in fillings]
-    params["fillings"]["n"] = int(len(fillings))
 
     with open(args.input, 'w') as file:
         yaml.dump(params, file)
