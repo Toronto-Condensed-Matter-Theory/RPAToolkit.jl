@@ -85,7 +85,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
     model = load(input["unitcell"]["julia"])
 
     unitcell = model["unit cell"]
-    parameters = model["parameters"]
+    parameters = haskey(model, "parameters") ? model["parameters"] : []
     triqs_input = input["unitcell"]["julia"][1:end-5] * ".npz"
 
     resolve_k_points!(runtime_input, unitcell)

@@ -109,7 +109,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     #####* Extracting the unit cell and parameters from the model
     unitcell = model["unit cell"]
-    parameters = model["parameters"]
+    parameters = haskey(model, "parameters") ? model["parameters"] : []
     subs = length(model["unit cell"].basis)
 
     #####* Reading interaction data from file : parameters and different values to run RPA on
