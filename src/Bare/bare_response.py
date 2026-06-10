@@ -18,10 +18,19 @@ paulis = [s4, s1, s2, s3, s4]
 
 #####* returns the bare response tensor chi0(k, iwn) for a given model
 def bare_chi(beta:float, w_max: float, dlr_err: float, mu: float, ham):
+    from triqs.gf import MeshImFreq
     
-    wmesh = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=dlr_err, symmetrize=True)
-    g0_wk = lattice_dyson_g0_wk(mu=mu, e_k=ham, mesh=wmesh)
-    chi00_wk = imtime_bubble_chi0_wk(g0_wk, nw=1)
+    # We want the static bare susceptibility (nw=1, iw_n=0). 
+    # lindhard_chi00 evaluates the Matsubara sum analytically directly from the band energies, 
+    # bypassing DLR mesh errors entirely.
+    # 
+    # TODO: Eventually fix the DLR bindings and switch back to the bubble approach:
+    # wmesh = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=dlr_err, symmetrize=True)
+    # g0_wk = lattice_dyson_g0_wk(mu=mu, e_k=ham, mesh=wmesh)
+    # chi00_wk = imtime_bubble_chi0_wk(g0_wk, nw=1)
+    
+    bmesh = MeshImFreq(beta=beta, S='Boson', n_iw=1)
+    chi00_wk = lindhard_chi00(ham, bmesh, mu=mu)
     return chi00_wk
 
 #####* returns S^a at site i of total sites N where S^a = [rho, Sx, Sy, Sz, rho].
