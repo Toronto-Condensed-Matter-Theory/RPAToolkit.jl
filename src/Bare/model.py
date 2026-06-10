@@ -87,8 +87,10 @@ def bandwidth(ks, ham):
     return (np.min(bands), np.max(bands))
 
 #####* fermi distribution function
-def fermi(e: float, beta: float, mu: float) -> float:
-    return 1.0 / (np.exp(beta * (e-mu)) + 1.0)
+def fermi(e, beta, mu):
+    # Clip to avoid overflow in exp
+    x = np.clip(beta * (e - mu), -100.0, 100.0)
+    return 1.0 / (np.exp(x) + 1.0)
 
 #####* filling at fixed temperature and chemical potential
 def filling(band, beta:float, mu: float)-> float:
@@ -107,21 +109,14 @@ def _mu_from_filling(target_filling: float, beta: float, band: np.ndarray,
     def objective(mu_value: float) -> float:
         return filling(band, beta, mu_value) - target_filling
 
-    f_min = objective(mu_min)
-    f_max = objective(mu_max)
-
-    if f_min > 0.0 and abs(f_min) > tol:
-        raise ValueError(f"Target filling {target_filling} is below reachable range at mu_min={mu_min}.")
-    if f_max < 0.0 and abs(f_max) > tol:
-        raise ValueError(f"Target filling {target_filling} is above reachable range at mu_max={mu_max}.")
-
-    if abs(f_min) <= tol:
-        return float(mu_min)
-    if abs(f_max) <= tol:
-        return float(mu_max)
-
     low = float(mu_min)
     high = float(mu_max)
+
+    # Expand bounds if the target filling is outside the current [mu_min, mu_max] range
+    while objective(low) > 0.0:
+        low -= 1.0
+    while objective(high) < 0.0:
+        high += 1.0
 
     for _ in range(max_iter):
         mid = 0.5 * (low + high)
