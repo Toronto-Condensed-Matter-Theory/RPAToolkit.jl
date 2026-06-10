@@ -97,7 +97,8 @@ if abspath(PROGRAM_FILE) == @__FILE__
     output_target = String(get(runtime_input, "output", dirname(parsed_args["input"])))
     runtime_dir = (endswith(output_target, "/") || isdir(output_target)) ? output_target : dirname(output_target)
     mkpath(runtime_dir)
-    runtime_input_file = joinpath(runtime_dir, "_runtime_input.yml")
+    prefix = basename(output_target)
+    runtime_input_file = joinpath(runtime_dir, "$(prefix)_runtime_input.yml")
     YAML.write_file(runtime_input_file, runtime_input)
 
     command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(runtime_input_file)`

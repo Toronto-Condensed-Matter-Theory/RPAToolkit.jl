@@ -13,6 +13,9 @@ include("Interactions.jl")
 using .Interactions
 export interaction
 
+    prefix = basename(output_target)
+    return joinpath(runtime_dir, "$(prefix)_runtime_input.yml")
+
 include("Response.jl")
 using .Response
 export perform_RPA, minima, maxima, find_instability, effective_interaction

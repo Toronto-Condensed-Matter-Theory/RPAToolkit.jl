@@ -76,8 +76,7 @@ def energies(k, ham):
 
 #####* returns band energies at each k-value
 def bands(ham, kmesh):
-    N = kmesh.dims
-    band = [np.linalg.eigvalsh(ham(kmesh[i].value)) for i in range(np.prod(N))]
+    band = [np.linalg.eigvalsh(ham(k.value)) for k in kmesh]
     band = np.concatenate(band, axis = 0)
     
     return band
