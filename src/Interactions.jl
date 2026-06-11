@@ -19,8 +19,8 @@ function interaction(strength::Float64, k::Vector{Float64};
         b1  =   localDim * (i - 1) + 1
         b2  =   localDim * (j - 1) + 1
 
-        mat[b1 : b1 + localDim - 1, b2 : b2 + localDim - 1] += value * exp(-1.0im * dot(k[1:length(δ)], δ))
-        mat[b2 : b2 + localDim - 1, b1 : b1 + localDim - 1] += value' * exp(1.0im * dot(k[1:length(δ)], δ))
+        mat[b1 : b1 + localDim - 1, b2 : b2 + localDim - 1] .+= value .* exp(-1.0im * dot(k[1:length(δ)], δ))
+        mat[b2 : b2 + localDim - 1, b1 : b1 + localDim - 1] .+= value' .* exp(1.0im * dot(k[1:length(δ)], δ))
     end
 
     return strength * mat
