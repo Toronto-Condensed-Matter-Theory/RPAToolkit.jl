@@ -49,47 +49,49 @@ if __name__=="__main__":
     unitcell = np.load(params["unitcell"]["triqs"])
     print("Unit cell loaded")
     
-    #####* fillings vs chemical potential
-    beta = params["beta"]
-    outDirectory = params["output"]
-    if "mus" not in params or "values" not in params["mus"]:
-        raise ValueError("plot_bare.py requires mus.values in the provided input file.")
-    mus = params["mus"]["values"]
+    try:
+        from triqs.utility.mpi import mpi
+        mpi_rank = mpi.rank
+    except ImportError:
+        mpi_rank = 0
 
-    plotDirectory = params["plots"]
-    
-    for mu in mus:
-        output = outDirectory + f"_beta={beta}_mu={np.round(mu, 3)}.npz"
-        data = np.load(output, allow_pickle=True)
+    if mpi_rank == 0:
+        #####* fillings vs chemical potential
+        beta = params["beta"]
+        outDirectory = params["output"]
+        if "mus" not in params or "values" not in params["mus"]:
+            raise ValueError("plot_bare.py requires mus.values in the provided input file.")
+        mus = params["mus"]["values"]
 
-        if "k_point_labels" in data.files:
-            path_labels = format_path_labels(data["k_point_labels"])
-        elif "k_points_labels" in params:
-            path_labels = format_path_labels(params["k_points_labels"])
-        else:
-            path_labels = format_path_labels(params["k_labels"])
+        plotDirectory = params["plots"]
         
-        #####* plotting the bands
-        plt.clf()
-        plt.plot(data["path_plot"], data["bands"])
-        plt.xticks(data["path_ticks"], path_labels)
-        plt.ylabel(r'$\epsilon(\mathbf{k})$')
-        plt.grid(True)
-        plt.savefig(f"{plotDirectory}_bands.png") 
-        
-        #####* plotting the path
-        plt.clf()
-        k_vecs = data["path"]
-        plt.scatter(k_vecs[:,0], k_vecs[:,1]) 
-        plt.xlabel(r'$k_x$')
-        plt.ylabel(r'$k_y$')
-        plt.grid(True)
-        plt.savefig(f"{plotDirectory}_path.png")       
-        #####* plotting all the bare susceptibilities.
-        # for direction in params["directions"]:
-        #     plot_title = titles[direction]
-        #     saveFile = f"{plotDirectory}_{labels[direction]}_beta={beta}_mu={np.round(mu, 3)}.png"
-        #     plot_chi(data, direction, path_labels, plot_title, saveFile)
+        for mu in mus:
+            output = outDirectory + f"_beta={beta}_mu={np.round(mu, 3)}.npz"
+            data = np.load(output, allow_pickle=True)
+
+            if "k_point_labels" in data.files:
+                path_labels = format_path_labels(data["k_point_labels"])
+            elif "k_points_labels" in params:
+                path_labels = format_path_labels(params["k_points_labels"])
+            else:
+                path_labels = format_path_labels(params["k_labels"])
+            
+            #####* plotting the bands
+            plt.clf()
+            plt.plot(data["path_plot"], data["bands"])
+            plt.xticks(data["path_ticks"], path_labels)
+            plt.ylabel(r'$\epsilon(\mathbf{k})$')
+            plt.grid(True)
+            plt.savefig(f"{plotDirectory}_bands.png") 
+            
+            #####* plotting the path
+            plt.clf()
+            k_vecs = data["path"]
+            plt.scatter(k_vecs[:,0], k_vecs[:,1]) 
+            plt.xlabel(r'$k_x$')
+            plt.ylabel(r'$k_y$')
+            plt.grid(True)
+            plt.savefig(f"{plotDirectory}_path.png")
     
 
 

@@ -102,8 +102,17 @@ if __name__=="__main__":
     
     print("Starting TRIQS calculations...")
     
-    for index, mu in enumerate(mus):
-        print(f"calculating bare bubble for mu = {mu} => filling = {fillings[index]}...")
+    try:
+        from triqs.utility.mpi import mpi
+        mpi_size = mpi.size
+        mpi_rank = mpi.rank
+    except ImportError:
+        mpi_size = 1
+        mpi_rank = 0
+
+    def compute_for_filling(args_tuple):
+        index, mu, filling = args_tuple
+        print(f"calculating bare bubble for mu = {mu} => filling = {filling}...")
 
         chi00 = br.bare_chi(beta, w_max, dlr_err, mu, hamiltonian)
         
@@ -117,16 +126,33 @@ if __name__=="__main__":
             chi = br.interpolate_chi_mat(chi00, direction, N, ks_contract)
             output[labels[direction]] = chi
 
-        print("contraction completed")
-
+        print(f"contraction completed for mu = {mu}")
 
         fileName = params["output"] + f"_beta={beta}_mu={np.round(mu, 3)}.npz"
-        np.savez(fileName, **output,
-                    beta = beta, mu = float(mu), filling=float(fillings[index]), 
-                    primitives=model.units, reciprocal = kmesh.bz.units, 
-                    ks = ks, path = path_vecs, path_plot = path_plot, path_ticks = path_ticks,
-                    contracted = ks_contract, 
-                    bandwidth = np.array(bandwidth), bands = np.array([mdl.energies(k, hamiltonian) for k in path_vecs]))
+        
+        # Only rank 0 saves the file in MPI runs
+        if mpi_rank == 0:
+            np.savez(fileName, **output,
+                        beta = beta, mu = float(mu), filling=float(filling), 
+                        primitives=model.units, reciprocal = kmesh.bz.units, 
+                        ks = ks, path = path_vecs, path_plot = path_plot, path_ticks = path_ticks,
+                        contracted = ks_contract, 
+                        bandwidth = np.array(bandwidth), bands = np.array([mdl.energies(k, hamiltonian) for k in path_vecs]))
+
+    tasks = [(index, mu, fillings[index]) for index, mu in enumerate(mus)]
+
+    if mpi_size > 1:
+        # TRIQS parallelizes internally over k-points via MPI
+        for task in tasks:
+            compute_for_filling(task)
+    else:
+        # No MPI: parallelize over fillings using multiprocessing
+        import multiprocessing
+        num_cores = multiprocessing.cpu_count()
+        print(f"No MPI detected. Using multiprocessing over fillings with {num_cores} cores.")
+        with multiprocessing.Pool(processes=num_cores) as pool:
+            pool.map(compute_for_filling, tasks)
+
     
 
 

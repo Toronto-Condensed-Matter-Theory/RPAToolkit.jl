@@ -101,10 +101,18 @@ if abspath(PROGRAM_FILE) == @__FILE__
     runtime_input_file = joinpath(runtime_dir, "$(prefix)_runtime_input.yml")
     YAML.write_file(runtime_input_file, runtime_input)
 
-    command = `$(input["triqs_environment"]) $(@__DIR__)/run_bare.py $(runtime_input_file)`
+    env_args = split(input["triqs_environment"])
+    
+    # Prevent thread explosion (100 workers * 100 threads) by forcing 1 thread per python process
+    py_env = copy(ENV)
+    py_env["OMP_NUM_THREADS"] = "1"
+    py_env["MKL_NUM_THREADS"] = "1"
+    py_env["OPENBLAS_NUM_THREADS"] = "1"
+
+    triqs_env_cmd = String.(split(input["triqs_environment"]))
+    command = setenv(Cmd(vcat(triqs_env_cmd, [joinpath(@__DIR__, "run_bare.py"), runtime_input_file])), py_env)
     run(command)
 
-    command = `$(input["triqs_environment"]) $(@__DIR__)/plot_bare.py $(runtime_input_file)`
-    run(command)
-
+    command_plot = setenv(Cmd(vcat(triqs_env_cmd, [joinpath(@__DIR__, "plot_bare.py"), runtime_input_file])), py_env)
+    run(command_plot)
 end
