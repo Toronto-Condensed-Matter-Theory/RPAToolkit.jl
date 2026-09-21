@@ -66,6 +66,57 @@ function maxima(eigenstates::Vector{Tuple{Vector{ComplexF64}, Matrix{ComplexF64}
 end
 
 
+"""
+    find_instability(chis, ks, V_unit; steps, lower, upper, primitives)
+
+The same binary search, but against interaction matrices that are already
+built. `interaction(strength, ks) == strength * interaction(1.0, ks)` exactly,
+so the bisection only needs to rescale them.
+
+This is the form the caller wants whenever the matrices do not come from a
+`Lookup` at all -- a vertex projected onto a symmetry-closed bilinear basis is
+one constant matrix per q, with no bonds to walk -- and it is also what keeps
+the search from rebuilding the same matrices 32 times per case and mu. On the
+ZrNCl Coulomb case (7419 bonds on a 297 x 297 grid) that rebuild is the whole
+cost of the stage.
+"""
+function find_instability(chis::Vector{Matrix{ComplexF64}}, ks::Vector{Vector{Float64}},
+        V_unit::Vector{Matrix{ComplexF64}};
+        steps::Int = 32, lower::Float64 = 0.0, upper::Float64 = 10.0,
+        primitives = [[0.0, 0.0], [0.0, 0.0]])::Dict{String, Any}
+
+    length(V_unit) == length(chis) ||
+        error("find_instability: $(length(V_unit)) interaction matrices for $(length(chis)) " *
+              "susceptibilities; they must live on the same q grid.")
+    scaled(s) = [s .* V for V in V_unit]
+
+    check = nothing
+    current = Float64[]
+    for _ in 1:steps
+        push!(current, (upper + lower) / 2)
+        check = minima(perform_RPA(chis, scaled(current[end])))
+        if check["minimum eigenvalue"] < -1e-6
+            upper = current[end]
+        else
+            lower = current[end]
+        end
+    end
+
+    d = length(primitives[begin])
+    at = check["minimum eigenvalue"] < -1e-6 ? lower : current[end]
+    eigenstates = perform_RPA(chis, scaled(at))
+    check = minima(eigenstates)
+    peak = maxima(eigenstates)
+    k_min = ks[check["minimum index"]]
+    k_max = ks[peak["maximum index"]]
+
+    return Dict("critical strength" => lower, check..., peak...,
+                "minimum reciprocal momentum" => dot.(Ref(k_min[1:d]), primitives) ./ (2*pi),
+                "minimum momentum" => k_min,
+                "maximum reciprocal momentum" => dot.(Ref(k_max[1:d]), primitives) ./ (2*pi),
+                "maximum momentum" => k_max)
+end
+
 function find_instability(chis::Vector{Matrix{ComplexF64}}, ks::Vector{Vector{Float64}};
         steps::Int = 32, lower::Float64 = 0.0, upper::Float64 = 10.0,
         kwargs...)::Dict{String, Any}

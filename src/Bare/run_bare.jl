@@ -101,15 +101,21 @@ if abspath(PROGRAM_FILE) == @__FILE__
     runtime_input_file = joinpath(runtime_dir, "$(prefix)_runtime_input.yml")
     YAML.write_file(runtime_input_file, runtime_input)
 
-    env_args = split(input["triqs_environment"])
-    
+    # How to launch the TRIQS python. The rank count belongs to the allocation rather than to
+    # the config, so the sbatch scripts export TRIQS_ENVIRONMENT instead of writing it into the
+    # yml -- which only worked if the yml also carried the key, and the ZrNCl_4 configs do not.
+    # Config first, then the environment, then a plain python3.
+    triqs_environment = String(get(input, "triqs_environment",
+                                   get(ENV, "TRIQS_ENVIRONMENT", "python3")))
+    println("TRIQS launcher: $triqs_environment")
+
     # Prevent thread explosion (100 workers * 100 threads) by forcing 1 thread per python process
     py_env = copy(ENV)
     py_env["OMP_NUM_THREADS"] = "1"
     py_env["MKL_NUM_THREADS"] = "1"
     py_env["OPENBLAS_NUM_THREADS"] = "1"
 
-    triqs_env_cmd = String.(split(input["triqs_environment"]))
+    triqs_env_cmd = String.(split(triqs_environment))
     command = setenv(Cmd(vcat(triqs_env_cmd, [joinpath(@__DIR__, "run_bare.py"), runtime_input_file])), py_env)
     run(command)
 

@@ -1,0 +1,8 @@
+n_orb=2
+n_sites=1
+n_k=12
+beta=50.0
+mu=-3.6
+tau_equal=1
+n_basis=1
+reciprocal=6.283185307179586,0.0;0.0,6.283185307179586
