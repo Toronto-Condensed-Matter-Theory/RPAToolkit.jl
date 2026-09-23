@@ -21,35 +21,67 @@ except ImportError:
 labels = {0 : "chi_NN", 1 : "chi_XX", 2 : "chi_YY", 3 : "chi_ZZ", 4 : "chi_NN"}
 
 
+def _scan_axis(cfg: dict, name: str, span=None) -> np.ndarray:
+    """One scan axis, from `values`, or `min`/`max`/`n`, or a bare `n` spanning `span`."""
+    if "values" in cfg:
+        return np.asarray(cfg["values"], dtype=float)
+    if all(k in cfg for k in ("min", "max", "n")):
+        return np.linspace(float(cfg["min"]), float(cfg["max"]), int(cfg["n"]))
+    if "n" in cfg and span is not None:
+        return np.linspace(float(span[0]), float(span[1]), int(cfg["n"]))
+    allowed = "`values`, or `min`+`max`+`n`" + (", or a bare `n` spanning the bandwidth"
+                                                if span is not None else "")
+    raise ValueError(f"{name} must define {allowed}; got keys {sorted(cfg)}.")
+
+
 def resolve_scan_values(params: dict, beta: float, hamiltonian, kmesh, bwidth: tuple):
-    if "fillings" in params:
-        filling_config = params["fillings"]
-        if "values" in filling_config:
-            fillings = np.asarray(filling_config["values"], dtype=float)
-        elif all(key in filling_config for key in ["min", "max", "n"]):
-            fillings = np.linspace(float(filling_config["min"]), float(filling_config["max"]), int(filling_config["n"]))
-        else:
-            raise ValueError("fillings must define either values or min/max/n.")
+    """The (mus, fillings) this run scans over, and which of the two the config asked for.
 
-        mus = mdl.mus_from_fillings(fillings, beta, hamiltonian, kmesh)
-        return mus, fillings
+    MU IS THE SCAN VARIABLE. chi0 is computed at a chemical potential; the filling is a
+    label derived from it by counting states. A config may instead ask for fillings, and
+    then the mus are obtained ONCE by numerically inverting filling(mu) -- but from that
+    point on the mus are what the run IS, and the fillings are a record of what was asked
+    for.
 
-    if "mus" not in params:
-        raise ValueError("Input must define either fillings or mus.")
+    That "once" is the whole reason this function returns a `source` and the caller writes
+    it back. run_bare.py resolves the scan and then dumps the resolved values into the
+    runtime YAML, which means the file it reads and the file it writes are the same file.
+    Before this was explicit, the write-back put BOTH `mus.values` and `fillings.values`
+    into that file while `fillings` silently took precedence on read -- so re-running the
+    same runtime YAML took the inversion branch instead of the values branch and landed on
+    a slightly different mu (measured: 9.3e-08, which moves chi by 4.5e-07, ten thousand
+    times the 1.9e-11 that separates the two bubble methods). The pipeline regenerates the
+    runtime file from the config each time so it never hit this, but anyone re-running a
+    runtime YAML by hand did.
 
-    if "values" in params["mus"]:
-        mus = np.asarray(params["mus"]["values"], dtype=float)
-    elif all(key in params["mus"] for key in ["min", "max", "n"]):
-        mus = np.linspace(float(params["mus"]["min"]), float(params["mus"]["max"]), int(params["mus"]["n"]))
-    elif "n" in params["mus"]:
-        mus = np.linspace(*bwidth, int(params["mus"]["n"]))
-    else:
-        raise ValueError("mus must define either values, min/max/n, or n.")
-
+    With `scan.source` recorded, a resolved file is resolved: its mus are taken verbatim
+    and only the fillings are recomputed, so reading it again is a no-op.
+    """
     band = mdl.bands(hamiltonian, kmesh)
-    fillings = np.array([mdl.filling(band, beta, float(mu)) for mu in mus], dtype=float)
+    fillings_of = lambda mus: np.array([mdl.filling(band, beta, float(mu)) for mu in mus],
+                                       dtype=float)
 
-    return mus, fillings
+    recorded = params.get("scan", {}).get("source")
+    if recorded is not None:
+        mus = np.asarray(params["mus"]["values"], dtype=float)
+        return mus, fillings_of(mus), recorded
+
+    has_mus, has_fillings = "mus" in params, "fillings" in params
+    if has_mus and has_fillings:
+        raise ValueError(
+            "the config sets BOTH `mus` and `fillings`, and there is no way to tell which "
+            "one is meant: they are two parameterisations of the same scan. Delete one. "
+            "(If this is a runtime YAML a previous run wrote, it should also carry "
+            "`scan.source`; regenerate it from the config rather than editing it.)")
+    if not (has_mus or has_fillings):
+        raise ValueError("the config must define either `mus` or `fillings`.")
+
+    if has_mus:
+        mus = _scan_axis(params["mus"], "mus", span=bwidth)
+        return mus, fillings_of(mus), "mus"
+
+    fillings = _scan_axis(params["fillings"], "fillings")
+    return mdl.mus_from_fillings(fillings, beta, hamiltonian, kmesh), fillings, "fillings"
 
 if __name__=="__main__":
     
@@ -129,16 +161,34 @@ if __name__=="__main__":
     beta = params["beta"]
     w_max = float(params.get("w_max", 20.0))
     dlr_err = float(params.get("dlr_err", 1e-12))
-    mus, fillings = resolve_scan_values(params, beta, hamiltonian, kmesh, bandwidth)
+    #####* how chi0(Omega = 0, q) is evaluated. "lindhard" (default) is the analytic
+    #####* Matsubara sum: exact, but O(N_k * N_q), which is ~120 days per mu at k_size 297.
+    #####* "dlr" is the DLR/imaginary-time FFT bubble: ~linear in N_k, measured 175x faster
+    #####* at k_size 27 and agreeing to 3e-11 at dlr_err 1e-12, at ~3.7x the peak memory.
+    #####* w_max and dlr_err were dead config keys until this existed. See bare_chi.
+    bubble = str(params.get("bubble", "lindhard")).lower()
+    if bubble not in ("lindhard", "dlr"):
+        raise ValueError(f"bubble must be 'lindhard' or 'dlr', got {bubble!r}")
+    print(f"bare bubble: {bubble}" + (f" (w_max={w_max}, eps={dlr_err})" if bubble == "dlr" else ""))
+    mus, fillings, scan_source = resolve_scan_values(params, beta, hamiltonian, kmesh, bandwidth)
 
-    # Persist resolved scan values to the runtime input file used in this run.
-    # run_bare.jl passes a temporary YAML, so the user input file is not modified.
-    params.setdefault("mus", {})
-    params["mus"]["values"] = [float(mu) for mu in mus]
-    params["mus"]["n"] = int(len(mus))
-    params.setdefault("fillings", {})
-    params["fillings"]["values"] = [float(val) for val in fillings]
-    params["fillings"]["n"] = int(len(fillings))
+    # Persist the resolved scan into the runtime YAML this run was handed. run_bare.jl
+    # regenerates that file from the config, so the user's own input is never modified --
+    # but this function both READS and WRITES it, so it has to say which of mus/fillings
+    # was the input. `scan.source` is what makes a second read a no-op (see
+    # resolve_scan_values); `scan.requested` keeps the original block, because the
+    # resolved arrays overwrite it below. Overwriting rather than updating in place is
+    # deliberate: leaving a stale `min`/`max` next to a resolved `values` invites exactly
+    # the "which one is real?" confusion this is meant to remove.
+    params["scan"] = {"source": scan_source,
+                      "requested": params.get("scan", {}).get("requested",
+                                                              params.get(scan_source, {}))}
+    params["mus"] = {"values": [float(mu) for mu in mus], "n": int(len(mus))}
+    params["fillings"] = {"values": [float(v) for v in fillings], "n": int(len(fillings))}
+    print(f"scan: {len(mus)} point(s), specified as `{scan_source}`"
+          + (" (mus inverted from them numerically, once)" if scan_source == "fillings" else "")
+          + f"\n      mu      {np.min(mus):.6g} .. {np.max(mus):.6g}"
+          + f"\n      filling {np.min(fillings):.6g} .. {np.max(fillings):.6g}")
 
     if mpi_rank == 0:
         with open(args.input, 'w') as file:
@@ -155,7 +205,7 @@ if __name__=="__main__":
         index, mu, filling = args_tuple
         print(f"calculating bare bubble for mu = {mu} => filling = {filling}...")
 
-        chi00 = br.bare_chi(beta, w_max, dlr_err, mu, hamiltonian)
+        chi00 = br.bare_chi(beta, w_max, dlr_err, mu, hamiltonian, method=bubble)
         
         output = {}
         for direction in params["directions"]:

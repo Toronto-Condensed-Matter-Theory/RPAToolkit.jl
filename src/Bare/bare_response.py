@@ -17,20 +17,60 @@ sdo = np.matrix([[0,0],[0,1]])
 paulis = [s4, s1, s2, s3, s4]
 
 #####* returns the bare response tensor chi0(k, iwn) for a given model
-def bare_chi(beta:float, w_max: float, dlr_err: float, mu: float, ham):
+def bare_chi(beta: float, w_max: float, dlr_err: float, mu: float, ham, method: str = "lindhard"):
+    """The static bare susceptibility chi0(Omega = 0, q), by one of two routes.
+
+    "lindhard" (default) evaluates the Matsubara sum analytically from the band energies.
+    Exact, no frequency-mesh error, and O(N_k * N_q): every q sums over every k. That
+    quadratic scaling is the problem -- measured single-threaded on the 4-orbital ZrNCl
+    model, 9.3 s at k_size 9 and 756 s at k_size 27, i.e. ~120 days per mu at k_size 297.
+
+    "dlr" builds G0 on a Discrete Lehmann Representation mesh, Fourier transforms to
+    (tau, r), forms the bubble as a product there and transforms back. Roughly LINEAR in
+    N_k, so the same measurement gives 0.50 s and 4.32 s -- a 175x speedup at k_size 27,
+    growing with the grid. Agreement with "lindhard" at k_size 27, as a fraction of
+    max|chi|:
+
+        dlr_err   1e-4      1e-6      1e-8      1e-10     1e-12
+        n_dlr       22        32        42         50        58
+        rel.err  6.0e-04   1.6e-05   1.3e-08    1.8e-09   3.2e-11
+
+    It costs memory: ~3.7x lindhard's peak, because G0 exists simultaneously on the (w,k),
+    (w,r) and (tau,r) meshes. Since it also needs far fewer MPI ranks to finish in time,
+    and the per-rank footprint is what sets the rank count (tprf all-reduces, so every rank
+    holds a full copy), that trade is strongly favourable -- but the launcher's rank count
+    has to know which route is in use.
+
+    `symmetrize=False` IS REQUIRED and is not a preference. On a symmetrized DLR mesh
+    imtime_bubble_chi0_wk returns silently all-NaN: no exception, no warning, and G0 itself
+    is finite, so the NaN is manufactured inside the bubble. (tprf's changelog note about
+    raising on non-symmetrized DLR meshes applies to the Eliashberg solver, not here; we do
+    the RPA ladder in Julia and never touch that solver.) The isfinite check below exists
+    because of that failure mode -- a silent NaN would otherwise propagate through
+    chi_RPA into the gap equation as numbers rather than as an error.
+    """
     from triqs.gf import MeshImFreq
-    
-    # We want the static bare susceptibility (nw=1, iw_n=0). 
-    # lindhard_chi00 evaluates the Matsubara sum analytically directly from the band energies, 
-    # bypassing DLR mesh errors entirely.
-    # 
-    # TODO: Eventually fix the DLR bindings and switch back to the bubble approach:
-    # wmesh = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=dlr_err, symmetrize=True)
-    # g0_wk = lattice_dyson_g0_wk(mu=mu, e_k=ham, mesh=wmesh)
-    # chi00_wk = imtime_bubble_chi0_wk(g0_wk, nw=1)
-    
-    bmesh = MeshImFreq(beta=beta, statistic='Boson', n_iw=1)
-    chi00_wk = lindhard_chi00(ham, bmesh, mu=mu)
+
+    if method == "lindhard":
+        bmesh = MeshImFreq(beta=beta, statistic='Boson', n_iw=1)
+        return lindhard_chi00(ham, bmesh, mu=mu)
+
+    if method != "dlr":
+        raise ValueError(f"bubble must be 'lindhard' or 'dlr', got {method!r}")
+
+    wmesh = MeshDLRImFreq(beta=beta, statistic='Fermion', w_max=w_max, eps=dlr_err,
+                          symmetrize=False)
+    g0_wk = lattice_dyson_g0_wk(mu=mu, e_k=ham, mesh=wmesh)
+    chi00_wk = imtime_bubble_chi0_wk(g0_wk, nw=1)
+    if not np.isfinite(chi00_wk.data).all():
+        n_bad = int((~np.isfinite(chi00_wk.data)).sum())
+        raise RuntimeError(
+            f"the DLR bubble returned {n_bad} non-finite entries of "
+            f"{chi00_wk.data.size} (beta={beta}, w_max={w_max}, eps={dlr_err}, "
+            f"{len(wmesh)} DLR nodes). G0 was finite, so this came out of "
+            f"imtime_bubble_chi0_wk. Check that the DLR mesh is NOT symmetrized, then "
+            f"loosen eps; set `bubble: lindhard` in the config to fall back to the "
+            f"analytic Matsubara sum.")
     return chi00_wk
 
 #####* returns S^a at site i of total sites N where S^a = [rho, Sx, Sy, Sz, rho].
