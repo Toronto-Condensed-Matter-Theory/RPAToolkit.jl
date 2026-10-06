@@ -153,6 +153,7 @@ if abspath(PROGRAM_FILE) == @__FILE__
         #####* combining different chis to form the full susceptibility matrix
         chis = combine_chis(triqs_data; directions = input["directions"], subs = subs)
         CombinedOutput[parent_label]["combined_chis"] = chis
+        CombinedOutput[parent_label]["chi_orientation"] = CHI_ORIENTATION
 
         println("Starting RPA...")
         for (label, value) in interaction_cases

@@ -236,7 +236,11 @@ def orbital_rep_from_bonds(bond_vecs, F_mats, g, tol=1e-6):
     for dv, F in zip(bond_vecs, F_mats):
         j = index_of(g @ dv)
         rows.append(np.kron(I_n, F_mats[j] if j >= 0 else zero) - np.kron(F.T, I_n))
-    _, s, Vh = np.linalg.svd(np.vstack(rows))
+    # full_matrices=False is not cosmetic: vstack(rows) is (n_bonds*n^2) x n^2, so the
+    # default full U is (n_bonds*n^2)^2 -- 4.8 GB at 1083 bonds and n = 4, which OOM-kills
+    # the process. Only the right singular vectors are used. Julia's svd is thin by
+    # default, which is why RPAToolkit.jl's copy of this never hit it.
+    _, s, Vh = np.linalg.svd(np.vstack(rows), full_matrices=False)
     D = Vh[-1].conj().reshape(n, n).T
     u, _, vh = np.linalg.svd(D)          # nearest unitary
     D = u @ vh

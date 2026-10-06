@@ -155,6 +155,22 @@ if __name__=="__main__":
     hamiltonian = mdl.hamiltonian(model, ksize)
     bandwidth = mdl.bandwidth(kmesh, hamiltonian)
     print("Hamiltonian built")
+
+    #####* The bubble's own Hamiltonian. With no spin-orbit coupling (H = h x 1_spin exactly) the
+    #####* spinless bubble times 1/2 IS every contraction of the spinful one (bare_response,
+    #####* "Spin factorization"): 16x less chi0 and 4x less G0 per rank, the same numbers.
+    #####* `bubble_spin: full` forces the spinful bubble, e.g. to check the two against each other.
+    bubble_spin = str(params.get("bubble_spin", "auto")).lower()
+    if bubble_spin not in ("auto", "full"):
+        raise ValueError(f"bubble_spin must be 'auto' or 'full', got {bubble_spin!r}")
+    spin_factorized = bubble_spin == "auto" and br.spin_factorizable(unitcell)
+    if spin_factorized:
+        ham_bubble = mdl.hamiltonian(mdl.triqs_model_spinless(br.spinless_unitcell(unitcell)), ksize)
+    else:
+        ham_bubble = hamiltonian
+    print("bare bubble spin: " + ("factorized (H = h x 1_spin exactly; spinless bubble x 1/2, one "
+                                  "contraction for every direction)" if spin_factorized else
+                                  f"full ({'forced by bubble_spin: full' if bubble_spin == 'full' else 'the model is not h x 1_spin'})"))
     
     
     #####* fillings vs chemical potential
@@ -205,16 +221,21 @@ if __name__=="__main__":
         index, mu, filling = args_tuple
         print(f"calculating bare bubble for mu = {mu} => filling = {filling}...")
 
-        chi00 = br.bare_chi(beta, w_max, dlr_err, mu, hamiltonian, method=bubble)
+        chi00 = br.bare_chi(beta, w_max, dlr_err, mu, ham_bubble, method=bubble)
         
         output = {}
+        contracted = {}
         for direction in params["directions"]:
-            if bilinear is None:
-                chi_grid = br.interpolate_chi_mat(chi00, direction, N, ks)
-                chi_path = br.interpolate_chi_mat(chi00, direction, N, path_vecs)
-            else:
-                chi_grid = br.interpolate_chi_basis(chi00, bilinear, direction, ks)
-                chi_path = br.interpolate_chi_basis(chi00, bilinear, direction, path_vecs)
+            # Factorized, every direction is the same contraction: do it once.
+            key = "any" if spin_factorized else direction
+            if key not in contracted:
+                if bilinear is None:
+                    contracted[key] = (br.interpolate_chi_mat(chi00, direction, N, ks, spin_factorized),
+                                       br.interpolate_chi_mat(chi00, direction, N, path_vecs, spin_factorized))
+                else:
+                    contracted[key] = (br.interpolate_chi_basis(chi00, bilinear, direction, ks, spin_factorized),
+                                       br.interpolate_chi_basis(chi00, bilinear, direction, path_vecs, spin_factorized))
+            chi_grid, chi_path = contracted[key]
             output[labels[direction]] = chi_grid
             output[labels[direction] + "_path"] = chi_path
 
@@ -236,6 +257,7 @@ if __name__=="__main__":
         if mpi_rank == 0:
             np.savez(fileName, **output, **basis_out,
                         beta = beta, mu = float(mu), filling=float(filling),
+                        bubble_spin_factorized = np.array([int(spin_factorized)]),
                         primitives=model.units, reciprocal = kmesh.bz.units,
                         ks = ks, path = path_vecs, path_plot = path_plot, path_ticks = path_ticks,
                         contracted = ks,

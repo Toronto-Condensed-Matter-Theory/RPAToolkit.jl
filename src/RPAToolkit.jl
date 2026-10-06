@@ -7,7 +7,7 @@ export parse_unitcell
 
 include("Preprocess.jl")
 using .Preprocess
-export dress_primitives, dress_reciprocal, combine_chis, get_reciprocal_ks
+export dress_primitives, dress_reciprocal, combine_chis, get_reciprocal_ks, CHI_ORIENTATION
 
 include("InputParser.jl")
 using .InputParser

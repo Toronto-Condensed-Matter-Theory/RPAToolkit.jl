@@ -50,6 +50,20 @@ def triqs_model(unitcell: dict):
         hoppings = hoppings
     )
 
+#####* the spinless twin of triqs_model, for bare_response.spinless_unitcell's dictionary:
+#####* one orbital per (position, orbital), no spin labels.
+def triqs_model_spinless(unitcell: dict):
+    units = [tuple(unit) for unit in np.transpose(unitcell["units"])]
+    positions = [tuple(pos) for pos in np.transpose(unitcell["orbital_positions"])]
+    hoppings = {tuple(unitcell["hopping offsets"][:, i]) : np.array(unitcell["hopping matrices"][i, :, :])
+                    for i in range(unitcell["hopping offsets"].shape[1])}
+    return TBLattice(
+        units = units,
+        orbital_positions = positions,
+        orbital_names = [str(i + 1) for i in range(len(positions))],
+        hoppings = hoppings
+    )
+
 #####* return the hamiltonian in the Brillouin zone for the corresponding model
 def hamiltonian(model, ksize: int):
     kmesh = model.get_kmesh(n_k=(ksize, ksize, 1))

@@ -73,6 +73,44 @@ def bare_chi(beta: float, w_max: float, dlr_err: float, mu: float, ham, method: 
             f"analytic Matsubara sum.")
     return chi00_wk
 
+#####* ---------------------------------------------------------------------- #
+#####* Spin factorization of the bubble.
+#####*
+#####* A model without spin-orbit coupling has H = h (x) 1_spin, spin the INNER index
+#####* (see S_operator), so G0 = g0 (x) 1 and tprf's particle-hole bubble, which pairs
+#####* the indices as -G_da G_bc, carries delta(s_d, s_a) delta(s_b, s_c). Contracted
+#####* with (M_i (x) sigma^a/2) and (M_j (x) sigma^a/2) that is the spinless bubble
+#####* contracted with M_i, M_j times Tr[(sigma^a/2)^2] = 1/2, the same for every
+#####* direction a. Exact: on ZrNCl_4 (k_size 12, mu 0.9) the dlr routes agree to 5e-15
+#####* for all four directions, per-orbital and closed basis. lindhard agrees to 2e-8:
+#####* the spinful Hamiltonian's exactly degenerate spin pairs feed rounding-level
+#####* splittings into its (f1 - f2)/(e1 - e2), which the spinless one never has. The spinless bubble holds
+#####* 16x fewer chi0 entries (norb^4) and 4x fewer G0 entries (norb^2) per rank.
+#####* ---------------------------------------------------------------------- #
+SPIN_FACTOR = 0.5   # Tr[(sigma^a / 2)^2] for a = 0..3
+
+
+def spin_factorizable(unitcell) -> bool:
+    """True when the model is exactly h (x) 1_spin: no spin-flip hopping, identical up and down
+    blocks, and spin partners at the same position. Exactly, not to a tolerance: the
+    factorization is an identity only then."""
+    H = np.asarray(unitcell["hopping matrices"])
+    P = np.asarray(unitcell["orbital_positions"])
+    if H.shape[-1] % 2 or P.shape[1] != H.shape[-1]:
+        return False
+    return (not np.any(H[:, 0::2, 1::2]) and not np.any(H[:, 1::2, 0::2])
+            and np.array_equal(H[:, 0::2, 0::2], H[:, 1::2, 1::2])
+            and np.array_equal(P[:, 0::2], P[:, 1::2]))
+
+
+def spinless_unitcell(unitcell) -> dict:
+    """The spin-up block of a spin_factorizable unit cell, in the same dictionary layout."""
+    return {"units": np.asarray(unitcell["units"]),
+            "orbital_positions": np.asarray(unitcell["orbital_positions"])[:, 0::2],
+            "hopping offsets": np.asarray(unitcell["hopping offsets"]),
+            "hopping matrices": np.asarray(unitcell["hopping matrices"])[:, 0::2, 0::2]}
+
+
 #####* returns S^a at site i of total sites N where S^a = [rho, Sx, Sy, Sz, rho].
 def S(i:int, direction:int, N: int) -> np.matrix:
     mat = np.zeros((2*N, 2*N), dtype=np.complex128)
@@ -102,15 +140,22 @@ def interpolate_chi(chi_contracted, ks):
     return chi_interp
 
 #####* interpolate the contracted susceptibility tensor along a high symmetry path in the Brillouin zone
-def interpolate_chi_mat(chi, direction:int, N: int, ks):
+#####* spin_factorized: `chi` is the spinless bubble of a spin_factorizable model; the result is the
+#####* same contraction of the spinful one (direction drops out).
+def interpolate_chi_mat(chi, direction:int, N: int, ks, spin_factorized: bool = False):
 
     chiMats = np.zeros([ks.shape[0], N, N], dtype=complex)
     
     for i in range(N):
         for j in range(N):
             
-            chi_contracted = chi_contraction(chi, i, j, direction, N)
-            chiMats[:, i, j] += interpolate_chi(chi_contracted, ks)
+            if spin_factorized:
+                Ei, Ej = np.diag(np.eye(N)[i]), np.diag(np.eye(N)[j])
+                chi_contracted = chi_contraction_ops(chi, Ei, Ej)
+                chiMats[:, i, j] += SPIN_FACTOR * interpolate_chi(chi_contracted, ks)
+            else:
+                chi_contracted = chi_contraction(chi, i, j, direction, N)
+                chiMats[:, i, j] += interpolate_chi(chi_contracted, ks)
     
     return chiMats
 
@@ -149,13 +194,21 @@ def chi_contraction_ops(chi, Oi, Oj):
     return out[Idx(0), :]
 
 
-def chi_matrix_on_basis(chi, basis, direction: int):
+def _basis_ops(basis, direction: int, spin_factorized: bool):
+    """The operators chi is contracted with, and the factor the contraction carries: M (x) sigma/2
+    on a spinful bubble, M itself times SPIN_FACTOR on the spinless one."""
+    if spin_factorized:
+        return [np.asarray(M) for M in basis], SPIN_FACTOR
+    return [S_operator(M, direction) for M in basis], 1.0
+
+
+def chi_matrix_on_basis(chi, basis, direction: int, spin_factorized: bool = False):
     """chi_kl(q) on a basis of orbital bilinears, read straight off the mesh.
 
     Returns (N_q, d, d). No interpolation: use this when the q grid IS the
     bubble's own k mesh, which is the case whenever k_size matches.
     """
-    ops = [S_operator(M, direction) for M in basis]
+    ops, factor = _basis_ops(basis, direction, spin_factorized)
     d = len(ops)
     first = chi_contraction_ops(chi, ops[0], ops[0])
     n_q = first.data.shape[0]
@@ -166,15 +219,15 @@ def chi_matrix_on_basis(chi, basis, direction: int):
             if i == 0 and j == 0:
                 continue
             out[:, i, j] = chi_contraction_ops(chi, ops[i], ops[j]).data[:]
-    return out
+    return factor * out
 
 
-def interpolate_chi_basis(chi, basis, direction: int, ks):
+def interpolate_chi_basis(chi, basis, direction: int, ks, spin_factorized: bool = False):
     """chi_kl interpolated onto `ks`, the basis-generalised interpolate_chi_mat."""
-    ops = [S_operator(M, direction) for M in basis]
+    ops, factor = _basis_ops(basis, direction, spin_factorized)
     d = len(ops)
     out = np.zeros((ks.shape[0], d, d), dtype=complex)
     for i in range(d):
         for j in range(d):
             out[:, i, j] = interpolate_chi(chi_contraction_ops(chi, ops[i], ops[j]), ks)
-    return out
+    return factor * out

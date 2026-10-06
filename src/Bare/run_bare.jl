@@ -119,6 +119,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
     command = setenv(Cmd(vcat(triqs_env_cmd, [joinpath(@__DIR__, "run_bare.py"), runtime_input_file])), py_env)
     run(command)
 
-    command_plot = setenv(Cmd(vcat(triqs_env_cmd, [joinpath(@__DIR__, "plot_bare.py"), runtime_input_file])), py_env)
-    run(command_plot)
+    # No plotting stage here on purpose. plot_bare.py only redrew the bands and the k-path,
+    # both of which are already in the per-mu npz that run_bare.py just wrote, so nothing is
+    # lost by plotting them later from the notebook. Running it here cost us the whole
+    # pipeline: it is launched under the same mpirun as the solver, its rank guard never
+    # fired (see plot_bare.py), so every rank raced on the same PNG and on the matplotlib
+    # font cache, and one failed savefig took down the run *after* every bubble was on disk.
 end

@@ -1,7 +1,38 @@
+import os
 import numpy as np
 import yaml
 from matplotlib import pyplot as plt
 import argparse
+
+
+def mpi_rank():
+    """Rank of this process, or 0 when we are genuinely not under MPI.
+
+    Every branch here has to be able to say "I am NOT rank 0", because the only job of
+    this function is to stop 59 ranks from writing the same PNG at once. The previous
+    version guessed rank 0 whenever its import failed -- and its import *always* failed,
+    since triqs exposes the mpi module itself rather than an `mpi` attribute inside it.
+    So the guard silently passed every rank through. Ask the launcher before giving up:
+    the environment variables are set by the mpirun/srun that actually started us, so
+    they still answer correctly even if no python MPI binding can be imported.
+    """
+    try:
+        import triqs.utility.mpi as mpi
+        return mpi.rank
+    except Exception:
+        pass
+    try:
+        from mpi4py import MPI
+        return MPI.COMM_WORLD.Get_rank()
+    except Exception:
+        pass
+    for var in ("OMPI_COMM_WORLD_RANK", "PMI_RANK", "PMIX_RANK", "SLURM_PROCID"):
+        if var in os.environ:
+            try:
+                return int(os.environ[var])
+            except ValueError:
+                pass
+    return 0
 
 labels = {0 : "chi_NN", 1 : "chi_XX", 2 : "chi_YY", 3 : "chi_ZZ", 4 : "chi_NN"}
 titles = {0 : r'$\chi_{dd}(\mathbf{Q}, \Omega=0)$', 
@@ -49,13 +80,7 @@ if __name__=="__main__":
     unitcell = np.load(params["unitcell"]["triqs"])
     print("Unit cell loaded")
     
-    try:
-        from triqs.utility.mpi import mpi
-        mpi_rank = mpi.rank
-    except ImportError:
-        mpi_rank = 0
-
-    if mpi_rank == 0:
+    if mpi_rank() == 0:
         #####* fillings vs chemical potential
         beta = params["beta"]
         outDirectory = params["output"]
