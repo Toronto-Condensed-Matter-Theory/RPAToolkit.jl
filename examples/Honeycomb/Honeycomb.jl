@@ -31,7 +31,8 @@ save(input["unitcell"]["julia"], Dict("unit cell" => uc, "parameters" => [t1Para
 #####* the interactions: cases "Hubbard" (on-site) and "Coulomb" (on-site + 1/r tail)
 coulomb = input["coulomb"]
 params, cases = hubbard_coulomb_interactions(honeycomb_uc(); onsite = coulomb["onsite"], range = coulomb["range"])
-save(input["interactions"], Dict("parameters" => params, "values" => cases, "unit cell" => honeycomb_uc()))
+save(input["interactions"], Dict("parameters" => params, "values" => cases, "unit cell" => honeycomb_uc(),
+                                 "vertex_slots" => VERTEX_SLOTS))
 
 BLAS.set_num_threads(1)
 run_rpa(config; run_bare = true)

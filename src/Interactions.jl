@@ -1,33 +1,36 @@
 module Interactions
 
 using LinearAlgebra, TightBindingToolkit
+using ..RPAToolkit.SpinSectors: VERTEX_SLOTS
 
 export interaction, HUBBARD_CHANNELS, DENSITY_CHANNELS, hubbard_coulomb_interactions
 
 """
     HUBBARD_CHANNELS
 
-The on-site Hubbard term `U n_up n_dn` in the (N, X, Y, Z) channel slots: `diag(+1, 0, 0, -1)`.
+The on-site Hubbard term `U n_up n_dn` in the (N, X, Y, Z) channel slots: `diag(-1, +1, +1, +1)`.
 
-With `chi_RPA = (1 - chi V)^-1 chi` and a positive bare `chi`, a positive entry is enhanced.
-Slot 1 therefore carries the Stoner (spin) vertex `U^(s)` and slot 4 carries the charge vertex
-negated, `-U^(c)` -- the layout `channel_blocks` uses.
+These are the physical channels ([`VERTEX_SLOTS`](@ref)). With `chi_RPA = (1 - chi V)^-1 chi` and a
+positive bare `chi`, a positive entry is enhanced: slots X, Y and Z carry the Stoner (spin) vertex
+`U^(s)` and slot N carries the charge vertex negated, `-U^(c)` -- the layout `channel_blocks`
+uses. Written in the Pauli channels, the antisymmetrized Hubbard vertex is exactly this matrix,
+so the layout stays right when spin-orbit coupling makes `chi` mix the channels.
 
 `interaction` adds every registered bond AND its Hermitian conjugate, on-site bonds included, so
 an on-site bond lands in its own block twice: register `U/2 .* HUBBARD_CHANNELS` to get `U`.
 """
-const HUBBARD_CHANNELS = ComplexF64[1 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 -1]
+const HUBBARD_CHANNELS = ComplexF64[-1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1]
 
 """
     DENSITY_CHANNELS
 
-A density-density term `V n_a n_b` in the (N, X, Y, Z) channel slots: `diag(0, 0, 0, -1)`, i.e.
-charge only (slot 4 holds `-U^(c)`, see [`HUBBARD_CHANNELS`](@ref)). A repulsive `V > 0` screens
-the charge channel and never enhances the spin channel.
+A density-density term `V n_a n_b` in the (N, X, Y, Z) channel slots: `diag(-1, 0, 0, 0)`, i.e.
+charge only (slot N holds `-U^(c)`, see [`HUBBARD_CHANNELS`](@ref)). A repulsive `V > 0` screens
+the charge channel and never enhances the spin channels.
 
 Register one direction per bond: `interaction` adds the Hermitian conjugate itself.
 """
-const DENSITY_CHANNELS = ComplexF64[0 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 -1]
+const DENSITY_CHANNELS = ComplexF64[-1 0 0 0; 0 0 0 0; 0 0 0 0; 0 0 0 0]
 
 #####* the lookup table flattened into (block offsets, bond vector, matrix, adjoint) once, so a
 #####* k-scan does not rebuild the bond vectors and adjoints at every momentum.
@@ -129,11 +132,12 @@ basis site, in the form `run_rpa` reads from an interactions file:
 
 Lengths are in the units of `uc.primitives`, and `onsite` in units of the tail's `1/r`. The RPA
 strength then scales the whole interaction. At momentum `q` the assembled matrix has
-`U^(s) = onsite` in slot 1 and `-U^(c)(q) = -(onsite + V(q))` in slot 4 on every site, with
-`V(q) = sum_{0 < |δ| <= range} e^{-i q.δ} / |δ|`.
+`-U^(c)(q) = -(onsite + V(q))` in slot N and `U^(s) = onsite` in slots X, Y and Z on every site,
+with `V(q) = sum_{0 < |δ| <= range} e^{-i q.δ} / |δ|`.
 
-Save the returned values with the interaction unit cell under the keys `"parameters"`, `"values"`
-and `"unit cell"`; `run_rpa` checks that unit cell against the model's.
+Save the returned values with the interaction unit cell and the slot layout under the keys
+`"parameters"`, `"values"`, `"unit cell"` and `"vertex_slots" => VERTEX_SLOTS`; `run_rpa` checks
+that unit cell against the model's and refuses a file without the layout.
 """
 function hubbard_coulomb_interactions(uc::UnitCell; onsite::Real, range::Real)
     length(uc.primitives) == 2 ||

@@ -4,6 +4,7 @@ using JLD2, NPZ, YAML, LaTeXStrings, LinearAlgebra, Plots, TightBindingToolkit
 using ..RPAToolkit.InputParser: load_rpa_input
 using ..RPAToolkit.parse_model: parse_unitcell
 using ..RPAToolkit.Preprocess: dress_primitives, combine_chis, CHI_ORIENTATION
+using ..RPAToolkit.SpinSectors: spin_symmetry, stored_spin_symmetry, spin_sectors, VERTEX_SLOTS
 using ..RPAToolkit.Interactions: interaction
 using ..RPAToolkit.Response: find_instability
 using ..RPAToolkit.BilinearVertex: basis_rotation, rotate_channel_blocks
@@ -242,9 +243,17 @@ function rpa_output_path(input)
 end
 
 #####* one mu's bubble, assembled into the block matrices the RPA multiplies
-function load_bubble(input, mu, localDim, subs)
+function load_bubble(input, mu, localDim, subs, model_symmetry)
     parent_label = "beta=$(input["beta"])_mu=$(round(mu, digits=3))"
     triqs_data = npzread_numeric(input["output"] * "_$(parent_label).npz")
+
+    # Which channel pairs the bubble holds. Contracted under less symmetry than the model has is
+    # fine (bubble_spin: full); under more means it came from a different model.
+    symmetry = stored_spin_symmetry(triqs_data; model_symmetry = model_symmetry)
+    level(sym) = findfirst(==(sym), ("SU2", "U1z", "none"))
+    level(symmetry) >= level(model_symmetry) ||
+        error("The bubble at $parent_label was contracted as $symmetry, but the model is " *
+              "$model_symmetry: it holds too few channel pairs for this model. Rerun the bare stage.")
 
     ks_contracted = triqs_data["contracted"]
     ks = Vector{eltype(ks_contracted)}[eachrow(ks_contracted)...]
@@ -259,8 +268,10 @@ function load_bubble(input, mu, localDim, subs)
     end
     chi_dim = chi_basis === nothing ? subs : length(chi_basis)
 
-    chis = combine_chis(triqs_data; directions = input["directions"], subs = chi_dim)
-    chis_path = combine_chis(triqs_data; directions = input["directions"], subs = chi_dim, suffix = "_path")
+    chis = combine_chis(triqs_data; directions = input["directions"], subs = chi_dim,
+                        model_symmetry = model_symmetry)
+    chis_path = combine_chis(triqs_data; directions = input["directions"], subs = chi_dim, suffix = "_path",
+                             model_symmetry = model_symmetry)
     size(chis[begin], 1) == localDim * chi_dim ||
         error("assembled chi at $parent_label is $(size(chis[begin], 1))x$(size(chis[begin], 1)) " *
               "but the stored basis has dimension $chi_dim over $localDim directions, which " *
@@ -268,7 +279,8 @@ function load_bubble(input, mu, localDim, subs)
 
     return (mu = mu, parent_label = parent_label, triqs_data = triqs_data,
             primitives = dress_primitives(triqs_data), ks = ks, ks_path = ks_path,
-            chi_basis = chi_basis, chi_dim = chi_dim, chis = chis, chis_path = chis_path)
+            chi_basis = chi_basis, chi_dim = chi_dim, chis = chis, chis_path = chis_path,
+            spin_symmetry = symmetry)
 end
 
 """
@@ -289,9 +301,15 @@ momenta. Keep BLAS single-threaded (`BLAS.set_num_threads(1)`) so the two do not
 
 The output has one entry per mu, keyed `"beta=<beta>_mu=<mu>"`, holding `"mu"`, `"beta"`,
 `"filling"`, `"triqs_data"` (the bubble file), `"combined_chis"` and `"combined_chis_path"` (from
-[`combine_chis`](@ref)), `"chi_orientation"`, `"<case>_interaction"` and
-`"<case>_interaction_path"` (the unit-strength `V(q)`), and `"<case>"` (the `find_instability`
-result). On the closed bilinear basis it also holds `"bilinear_basis"` and `"basis_dim"`.
+[`combine_chis`](@ref)), `"chi_orientation"`, `"spin_symmetry"` (the channel pairs chi holds, see
+[`spin_sectors`](@ref)), `"vertex_slots"`, `"<case>_interaction"` and `"<case>_interaction_path"`
+(the unit-strength `V(q)`), and `"<case>"` (the `find_instability` result, with the
+`"unstable sector"`).
+
+The interactions file must record `"vertex_slots" => VERTEX_SLOTS`. The RPA is solved one spin
+sector at a time: the model's spin symmetry ([`spin_symmetry`](@ref)) makes `chi` block diagonal
+in them, so a model without spin-orbit coupling solves its charge and one spin block, and one
+with Ising spin-orbit coupling its longitudinal (N, Z) and transverse (X, Y) blocks. On the closed bilinear basis it also holds `"bilinear_basis"` and `"basis_dim"`.
 """
 function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = false,
                  save_individual::Bool = false)
@@ -323,6 +341,20 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
               "Rebuild one of them so both describe the same orbitals.")
     say("Orbital count check: model and interactions agree at $subs orbitals.")
 
+    #####* The channel layout of the interaction. Files from before the physical slots carried the
+    # spin vertex in N and the charge vertex in Z, which reads as the wrong physics now, and
+    # silently so: refuse them.
+    get(interaction_data, "vertex_slots", nothing) == VERTEX_SLOTS ||
+        error("Interactions file $(input["interactions"]) does not record the channel layout " *
+              "\"$(VERTEX_SLOTS)\" under \"vertex_slots\" (it has " *
+              "$(repr(get(interaction_data, "vertex_slots", nothing)))). Files built before " *
+              "2026-11-01 put the spin vertex in slot N and the charge vertex in slot Z. Rebuild it " *
+              "with HUBBARD_CHANNELS/DENSITY_CHANNELS or channel_blocks, saving " *
+              "\"vertex_slots\" => VERTEX_SLOTS.")
+
+    model_symmetry = spin_symmetry(unitcell)
+    say("Model spin symmetry: $model_symmetry.")
+
     interaction_params = interaction_data["parameters"]
     interaction_cases = interaction_data["values"]
 
@@ -353,12 +385,15 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
 
     #####* every mu's bubble. They share one q grid and one basis, which is what lets each case's
     # interaction be built once below.
-    bubbles = [load_bubble(input, mu, localDim, subs) for mu in get_mu_values(input)]
+    bubbles = [load_bubble(input, mu, localDim, subs, model_symmetry) for mu in get_mu_values(input)]
     ref = bubbles[begin]
     for b in bubbles
         (b.ks == ref.ks && b.ks_path == ref.ks_path && b.primitives == ref.primitives) ||
             error("The bubbles at mu = $(ref.mu) and mu = $(b.mu) are on different q grids or " *
                   "lattices. Rerun the bare stage so every mu comes from the same config.")
+        b.spin_symmetry == ref.spin_symmetry ||
+            error("The bubbles at mu = $(ref.mu) and mu = $(b.mu) were contracted as " *
+                  "$(ref.spin_symmetry) and $(b.spin_symmetry). Rerun the bare stage.")
         (b.chi_basis === nothing) == (ref.chi_basis === nothing) &&
             (b.chi_basis === nothing || b.chi_basis == ref.chi_basis) ||
             error("The bubbles at mu = $(ref.mu) and mu = $(b.mu) were contracted onto different " *
@@ -437,9 +472,11 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
         bubble = bubbles[b]
         instabilities[t] = find_instability(bubble.chis, bubble.ks, unit_interactions[c].V;
                                             primitives = bubble.primitives,
-                                            lower = instability_lower, upper = instability_upper)
+                                            lower = instability_lower, upper = instability_upper,
+                                            sectors = spin_sectors(bubble.spin_symmetry, bubble.chi_dim))
         say("mu = $(bubble.mu), $(labels[c]): critical strength ≈ " *
-            "$(round(instabilities[t]["critical strength"], digits=3)).")
+            "$(round(instabilities[t]["critical strength"], digits=3)) " *
+            "($(instabilities[t]["unstable sector"])).")
     end
 
     CombinedOutput = Dict()
@@ -453,6 +490,9 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
         # Cooper form factors need (see its docstring); recorded so a consumer can refuse output
         # assembled under an older convention.
         entry["chi_orientation"] = CHI_ORIENTATION
+        # Which channel pairs chi holds, and the layout of the interaction matrices beside it.
+        entry["spin_symmetry"] = bubble.spin_symmetry
+        entry["vertex_slots"] = VERTEX_SLOTS
         entry["combined_chis"] = bubble.chis
         entry["combined_chis_path"] = bubble.chis_path
         if bubble.chi_basis !== nothing

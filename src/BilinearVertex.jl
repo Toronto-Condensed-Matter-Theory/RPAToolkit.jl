@@ -1,6 +1,7 @@
 module BilinearVertex
 
 using LinearAlgebra
+using ..RPAToolkit.SpinSectors: VERTEX_SLOTS
 
 export kanamori_vertex, project_vertex, channel_blocks, uncovered_bilinears,
        basis_rotation, rotate_channel_blocks
@@ -92,17 +93,18 @@ Assemble the spin and charge projections into the (N, X, Y, Z) bilinear layout
 this code uses: one 4x4 channel block per basis pair, with the channel index
 INNERMOST, so entry (p, q) sits at rows/cols 4*(p-1) + channel.
 
-The slots follow the existing convention (see ZrNCl_4_interactions_rusty.jl):
-NN carries U^(s) and ZZ carries -U^(c) -- the charge vertex is stored negated.
-X and Y stay zero, as they are in the per-orbital matrices.
+The slots are the physical channels ([`VERTEX_SLOTS`](@ref)): NN carries -U^(c) -- the charge
+vertex is stored negated -- and XX, YY and ZZ each carry U^(s).
 """
 function channel_blocks(Vs::AbstractMatrix, Vc::AbstractMatrix)
     d = size(Vs, 1)
     size(Vc) == (d, d) || error("channel_blocks: spin and charge blocks differ in size.")
     out = zeros(ComplexF64, 4 * d, 4 * d)
     for q in 1:d, p in 1:d
-        out[4 * (p - 1) + 1, 4 * (q - 1) + 1] = Vs[p, q]
-        out[4 * (p - 1) + 4, 4 * (q - 1) + 4] = -Vc[p, q]
+        out[4 * (p - 1) + 1, 4 * (q - 1) + 1] = -Vc[p, q]
+        for c in 2:4
+            out[4 * (p - 1) + c, 4 * (q - 1) + c] = Vs[p, q]
+        end
     end
     return out
 end

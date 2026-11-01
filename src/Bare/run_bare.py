@@ -18,7 +18,6 @@ except ImportError:
     mpi_size = 1
     mpi_rank = 0
 
-labels = {0 : "chi_NN", 1 : "chi_XX", 2 : "chi_YY", 3 : "chi_ZZ", 4 : "chi_NN"}
 
 
 def _scan_axis(cfg: dict, name: str, span=None) -> np.ndarray:
@@ -156,21 +155,41 @@ if __name__=="__main__":
     bandwidth = mdl.bandwidth(kmesh, hamiltonian)
     print("Hamiltonian built")
 
-    #####* The bubble's own Hamiltonian. With no spin-orbit coupling (H = h x 1_spin exactly) the
-    #####* spinless bubble times 1/2 IS every contraction of the spinful one (bare_response,
-    #####* "Spin factorization"): 16x less chi0 and 4x less G0 per rank, the same numbers.
-    #####* `bubble_spin: full` forces the spinful bubble, e.g. to check the two against each other.
+    #####* The bubble's own Hamiltonian, and which channel pairs it has (bare_response, "Spin
+    #####* symmetry"). With no spin-orbit coupling (H = h x 1_spin exactly) the spinless bubble
+    #####* times 1/2 IS every contraction of the spinful one: 16x less chi0 and 4x less G0 per rank,
+    #####* the same numbers, and only the diagonal pairs exist. With S_z conserved (Ising SOC) the
+    #####* spinful bubble is contracted onto the eight pairs of the {N, Z} and {X, Y} sectors;
+    #####* otherwise onto all sixteen. `bubble_spin: full` forces the spinful bubble and all
+    #####* sixteen pairs, e.g. to check the reduced routes against it.
     bubble_spin = str(params.get("bubble_spin", "auto")).lower()
     if bubble_spin not in ("auto", "full"):
         raise ValueError(f"bubble_spin must be 'auto' or 'full', got {bubble_spin!r}")
-    spin_factorized = bubble_spin == "auto" and br.spin_factorizable(unitcell)
+    model_symmetry = br.spin_symmetry(unitcell)
+    symmetry = model_symmetry if bubble_spin == "auto" else "none"
+    spin_factorized = symmetry == "SU2"
     if spin_factorized:
         ham_bubble = mdl.hamiltonian(mdl.triqs_model_spinless(br.spinless_unitcell(unitcell)), ksize)
     else:
         ham_bubble = hamiltonian
-    print("bare bubble spin: " + ("factorized (H = h x 1_spin exactly; spinless bubble x 1/2, one "
-                                  "contraction for every direction)" if spin_factorized else
-                                  f"full ({'forced by bubble_spin: full' if bubble_spin == 'full' else 'the model is not h x 1_spin'})"))
+    channel_pairs = [(a, b) for (a, b) in br.CHANNEL_PAIRS[symmetry]
+                     if a in params["directions"] and b in params["directions"]]
+    if symmetry != "SU2" and sorted(params["directions"]) != [0, 1, 2, 3]:
+        raise ValueError(f"directions = {params['directions']}: a {symmetry} bubble mixes the "
+                         "charge and spin channels, so it needs all four, [0, 1, 2, 3].")
+    if model_symmetry != "SU2" and bilinear is not None:
+        raise ValueError(f"bilinear_basis: closed needs a model without spin-orbit coupling, and this "
+                         f"one is {model_symmetry}. The closure measures the orbital representation "
+                         "from the spin-up block alone, which is not the symmetry of a spinful model.")
+    print(f"model spin symmetry: {model_symmetry}")
+    print("bare bubble spin: " + {
+        "SU2": "factorized (H = h x 1_spin exactly; spinless bubble x 1/2, one contraction for "
+               "every direction)",
+        "U1z": "full, S_z-conserving (no spin-flip hopping): the {N, Z} and {X, Y} sectors, "
+               f"{len(channel_pairs)} channel pairs",
+        "none": f"full ({'forced by bubble_spin: full' if bubble_spin == 'full' else 'no spin symmetry'}), "
+                f"{len(channel_pairs)} channel pairs",
+    }[symmetry])
     
     
     #####* fillings vs chemical potential
@@ -223,21 +242,37 @@ if __name__=="__main__":
 
         chi00 = br.bare_chi(beta, w_max, dlr_err, mu, ham_bubble, method=bubble)
         
+        def contract(a, b, points):
+            if bilinear is None:
+                return br.interpolate_chi_mat(chi00, a, N, points, spin_factorized, direction2=b)
+            return br.interpolate_chi_basis(chi00, bilinear, a, points, spin_factorized, direction2=b)
+
         output = {}
         contracted = {}
-        for direction in params["directions"]:
+        for (a, b) in channel_pairs:
             # Factorized, every direction is the same contraction: do it once.
-            key = "any" if spin_factorized else direction
+            key = "any" if spin_factorized else (a, b)
             if key not in contracted:
-                if bilinear is None:
-                    contracted[key] = (br.interpolate_chi_mat(chi00, direction, N, ks, spin_factorized),
-                                       br.interpolate_chi_mat(chi00, direction, N, path_vecs, spin_factorized))
-                else:
-                    contracted[key] = (br.interpolate_chi_basis(chi00, bilinear, direction, ks, spin_factorized),
-                                       br.interpolate_chi_basis(chi00, bilinear, direction, path_vecs, spin_factorized))
+                contracted[key] = (contract(a, b, ks), contract(a, b, path_vecs))
             chi_grid, chi_path = contracted[key]
-            output[labels[direction]] = chi_grid
-            output[labels[direction] + "_path"] = chi_path
+            output[br.pair_label(a, b)] = chi_grid
+            output[br.pair_label(a, b) + "_path"] = chi_path
+
+        #####* The pairs S_z conservation says are zero, measured once rather than assumed: a
+        #####* nonzero one means the detection or the bubble is wrong, and the RPA would silently
+        #####* drop real physics.
+        if symmetry == "U1z" and index == 0:
+            scale = max(np.abs(c[0]).max() for c in contracted.values())
+            skipped = [(a, b) for (a, b) in br.CHANNEL_PAIRS["none"]
+                       if (a, b) not in br.CHANNEL_PAIRS["U1z"]]
+            worst = max(np.abs(contract(a, b, ks)).max() for (a, b) in skipped)
+            print(f"U1z sector check: max |chi| over the {len(skipped)} skipped channel pairs is "
+                  f"{worst:.2e} against max |chi| {scale:.2e}")
+            if worst > 1e-10 * scale:
+                raise RuntimeError(f"the model has no spin-flip hopping, so the {{N, Z}} x {{X, Y}} "
+                                   f"channel pairs must vanish, but they reach {worst:.2e} "
+                                   f"({worst / scale:.2e} of max |chi|). Set `bubble_spin: full` to "
+                                   "keep every pair, and report this.")
 
         print(f"contraction completed for mu = {mu}")
 
@@ -258,6 +293,7 @@ if __name__=="__main__":
             np.savez(fileName, **output, **basis_out,
                         beta = beta, mu = float(mu), filling=float(filling),
                         bubble_spin_factorized = np.array([int(spin_factorized)]),
+                        spin_symmetry = np.array([br.SPIN_SYMMETRIES.index(symmetry)]),
                         primitives=model.units, reciprocal = kmesh.bz.units,
                         ks = ks, path = path_vecs, path_plot = path_plot, path_ticks = path_ticks,
                         contracted = ks,

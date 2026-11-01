@@ -16,15 +16,18 @@
         @test real(Vc[1, 1]) ≈ U            # U^(c)_aaaa
         @test real(Vc[1, 2]) ≈ 2Up - J      # U^(c)_aabb
         blocks = channel_blocks(Vs, Vc)
-        # HUBBARD and CHARGE/HUND as ZrNCl_4_interactions_rusty.jl defines them.
-        onsite_ref = (U / 2) .* Matrix(Diagonal([1.0, 0, 0, -1.0]))
-        interorb_ref = Up .* Matrix(Diagonal([0.0, 0, 0, -2.0])) .+
-                       J .* Matrix(Diagonal([1.0, 0, 0, 1.0]))
+        # HUBBARD and CHARGE/HUND as ZrNCl_4_interactions_rusty.jl defines them, in the
+        # physical slots: charge (negated) in N, spin in X, Y and Z.
+        onsite_ref = (U / 2) .* Matrix(Diagonal([-1.0, 1, 1, 1]))
+        interorb_ref = Up .* Matrix(Diagonal([-2.0, 0, 0, 0])) .+
+                       J .* Matrix(Diagonal([1.0, 1, 1, 1]))
+        @test onsite_ref == (U / 2) .* HUBBARD_CHANNELS
         @test maximum(abs.(blocks[1:4, 1:4] ./ 2 .- onsite_ref)) < 1e-12
         @test maximum(abs.(blocks[1:4, 5:8] .- interorb_ref)) < 1e-12
-        # X and Y slots stay empty, as in the per-orbital matrices.
-        @test all(blocks[4 .* (0:1) .+ 2, :] .== 0)
-        @test all(blocks[4 .* (0:1) .+ 3, :] .== 0)
+        # The three spin slots carry the same vertex, and no channel mixes with another.
+        spin(c) = blocks[4 .* (0:1) .+ c, 4 .* (0:1) .+ c]
+        @test spin(2) == spin(3) == spin(4)
+        @test off_sector_norm(blocks, spin_sectors("SU2", 2)) == 0
     end
 
     @testset "off-diagonal components need off-diagonal bilinears" begin

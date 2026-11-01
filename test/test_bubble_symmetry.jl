@@ -56,17 +56,18 @@
         end
     end
 
-    # Marked broken so the suite reports an Unexpected Pass -- i.e. tells us --
-    # the moment a symmetry-closed bilinear basis replaces this projection.
+    # The per-orbital projection of an E doublet is not covariant, and cannot be:
+    # that is a property of the operator set, not a bug, and `bilinear_basis: closed`
+    # (tested below) is the fix. Asserted as such, with the measured size pinned
+    # (trace 0.20, spectrum 0.34 of max), so a partial change cannot slip through.
+    # These were @test_broken until the closed basis existed.
     @testset "E doublet is not covariant in the per-orbital basis" begin
         for name in NOT_CLOSED
             f = load_fixture(name)
             ns = size(f.chi_NN, 2)
             tr = ComplexF64[sum(f.chi_NN[iq, i, i] for i in 1:ns) for iq in 1:f.n_q]
-            @test_broken scalar_residual(tr, f.perm) < TOL
-            @test_broken spectrum_residual(f.chi_NN, f.perm) < TOL
-            # Pin the order of magnitude so a partial change cannot slip through.
-            @test spectrum_residual(f.chi_NN, f.perm) > 1e-2
+            @test scalar_residual(tr, f.perm) > 1e-1
+            @test spectrum_residual(f.chi_NN, f.perm) > 1e-1
             # The bubble underneath is still exact.
             tot = ComplexF64[sum(f.chi_NN[iq, :, :]) for iq in 1:f.n_q]
             @test scalar_residual(tot, f.perm) < TOL

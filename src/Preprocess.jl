@@ -2,16 +2,19 @@ module Preprocess
 
 using NPZ, JLD2
 using LinearAlgebra
+using ..RPAToolkit.SpinSectors: stored_spin_symmetry, channel_pairs, pair_label
 
 export dress_primitives, dress_reciprocal, combine_chis, CHI_ORIENTATION
 export get_reciprocal_ks
 
-const labels = Dict(0 => "chi_NN", 1 => "chi_XX", 2 => "chi_YY", 3 => "chi_ZZ", 4 => "chi_NN")
-
 """
-The convention `combine_chis` returns: chi_ij(q) = <O_i(-q) O_j(q)>, with O_p(q) = sum_k c^dag_{k+q} M_p c_k
-in TightBindingToolkit's H(k) = sum_R e^{ik.R} t(R), normalised as the PER-SPIN bubble chi0 that the
-Graser vertices U^(s), U^(c) multiply. Consumers store this string beside the chis they write, so a
+The convention `combine_chis` returns: chi_ij(q) = <O_i(-q) O_j(q)>, with
+O_p(q) = sum_r e^{-iq.r} c^dag_r M_p c_r = sum_k c^dag_k M_p c_{k+q} in TightBindingToolkit's
+H(k) = sum_R e^{ik.R} t(R) -- the same e^{-iq.r} as `interaction`'s V(q) = sum_δ e^{-iq.δ} V_δ --
+normalised as the PER-SPIN bubble chi0 that the Graser vertices U^(s), U^(c) multiply. Pinned
+against a brute-force sum in every channel pair, the spin-orbit-coupled ones included
+(test/test_spin_bubble.jl). Until 2026-11-01 this read `sum_k c^dag_{k+q} M_p c_k`, which is O_p(-q);
+the numbers were always the ones above. Consumers store this string beside the chis they write, so a
 reader can refuse chis assembled under an older convention: before 2026-09-25 they were
 untransposed, and the first fixed files ("O(-q)O(q)") were still half the per-spin bubble.
 """
@@ -66,9 +69,9 @@ function get_reciprocal_ks(data::Dict ; entry::String = "ks")::Vector{Vector{Flo
 end
 
 """
-    combine_chis(data; directions, subs = nothing, suffix = "")
+    combine_chis(data; directions, subs = nothing, suffix = "", model_symmetry = nothing)
 
-Assemble the per-direction susceptibilities into one block matrix per q.
+Assemble the per-channel-pair susceptibilities into one block matrix per q.
 
 The block size is read from the stored data rather than from `subs`, so this
 works unchanged whether run_bare contracted onto the per-orbital operators
@@ -78,10 +81,13 @@ group mixes orbitals). `subs`, if given, is only checked against the data: a
 mismatch is reported, not silently accepted, because it means the interaction
 matrices -- built at 4 * subs -- will not match this chi.
 
-Stays block diagonal in the direction index, which is correct without
-spin-orbit coupling: the charge and the three spin channels do not mix.
+Every channel pair the bare stage stored is placed: the four diagonal ones without spin-orbit
+coupling, where the charge and the three spin channels do not mix, and the off-diagonal ones
+(`chi_NZ`, `chi_XY`, ...) of a spin-orbit-coupled model. Which pairs must be there is set by the
+spin symmetry the file records ([`stored_spin_symmetry`](@ref); `model_symmetry` is only used for
+files written before it was recorded), and a missing one is an error, not a zero.
 
-Each block is TRANSPOSED on the way in, which is what makes a multi-site kernel covariant.
+The whole matrix is TRANSPOSED on the way in, which is what makes a multi-site kernel covariant.
 run_bare.py contracts TRIQS's chi0_abcd with O_i on (a,b) and O_j on (c,d), which gives
 <O_i(q) O_j(-q)>. The RPA ladder of H = 1/2 sum V_pq O_p(q) O_q(-q), and the Cooper form
 factors <u_i|M_p|u_j> that the gap stage pairs with the vertex at q = k_i - k_j, need
@@ -92,7 +98,9 @@ Used as stored, the Fermi-surface kernel keeps only a 2mm subgroup of 6mm (C3 br
 ~6e-11 at k_size 33, 63 and 93. The transpose changes nothing where chi(q) is symmetric, e.g.
 one site per cell with inversion through it, which is why earlier models never showed it.
 Spectra, and hence critical scales, are unaffected either way. It is a plain transpose, not
-the adjoint.
+the adjoint, and of the WHOLE 4d x 4d matrix: channel block (b, a) of the result is the
+transpose of the stored (a, b) pair, which only coincides with transposing each block in place
+on the diagonal.
 
 Each block is also DOUBLED. run_bare.py contracts with S = M (x) sigma/2, so what it stores is
 <S S> = chi0 / 2 in every channel, where chi0 is the per-spin bubble. The vertices are Graser's
@@ -105,20 +113,31 @@ The bare terms in Gamma are unchanged, since they never touch chi.
 """
 function combine_chis(data::Dict ; directions::Vector{Int},
                       subs::Union{Int64, Nothing} = nothing,
-                      suffix::String = "")::Vector{Matrix{ComplexF64}}
+                      suffix::String = "",
+                      model_symmetry::Union{Nothing, AbstractString} = nothing)::Vector{Matrix{ComplexF64}}
     directions = sort(directions)
-    data_labels = [labels[i] * suffix for i in directions]
     localDim = length(directions)
+    symmetry = stored_spin_symmetry(data; model_symmetry = model_symmetry)
 
-    first_chi = data[data_labels[begin]]
+    required = [(a, b) for (a, b) in channel_pairs(symmetry) if a in directions && b in directions]
+    for (a, b) in required
+        haskey(data, pair_label(a, b) * suffix) ||
+            error("combine_chis: the bubble is $symmetry, so it must hold $(pair_label(a, b) * suffix), " *
+                  "and it does not. Rerun the bare stage.")
+    end
+    stored = [(a, b) for a in directions for b in directions if haskey(data, pair_label(a, b) * suffix)]
+
+    first_label = pair_label(required[begin]...) * suffix
+    first_chi = data[first_label]
     dim = size(first_chi, 2)
     size(first_chi, 3) == dim ||
-        error("combine_chis: $(data_labels[begin]) has blocks of size " *
+        error("combine_chis: $(first_label) has blocks of size " *
               "$(size(first_chi, 2))x$(size(first_chi, 3)); expected square.")
-    for label in data_labels
+    for (a, b) in stored
+        label = pair_label(a, b) * suffix
         size(data[label], 2) == dim && size(data[label], 3) == dim ||
             error("combine_chis: $label has block size $(size(data[label], 2)), " *
-                  "but $(data_labels[begin]) has $dim -- the directions were not " *
+                  "but $(first_label) has $dim -- the channel pairs were not " *
                   "contracted onto the same basis.")
     end
     if subs !== nothing && subs != dim
@@ -131,11 +150,12 @@ function combine_chis(data::Dict ; directions::Vector{Int},
     chi_combined = [zeros(ComplexF64, dim*localDim, dim*localDim)
                     for _ in 1:size(first_chi, 1)]
 
-    for (ind, label) in enumerate(data_labels)
-        chis = data[label]
-        inds = [ind + localDim * (i - 1) for i in 1:dim]
+    for (a, b) in stored
+        chis = data[pair_label(a, b) * suffix]
+        rows = [findfirst(==(b), directions) + localDim * (i - 1) for i in 1:dim]
+        cols = [findfirst(==(a), directions) + localDim * (i - 1) for i in 1:dim]
         setindex!.(chi_combined, [2 .* transpose(c) for c in eachslice(chis, dims = 1)],
-                   Ref(inds), Ref(inds))
+                   Ref(rows), Ref(cols))
     end
 
     return chi_combined

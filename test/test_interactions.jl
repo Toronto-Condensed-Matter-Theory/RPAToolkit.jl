@@ -30,17 +30,18 @@
     @testset "Hubbard and Coulomb at q = 0" begin
         tail    =   4 / 1 + 4 / sqrt(2) + 4 / 2 + 8 / sqrt(5)
         @test length(params) == 1 + 10        # one direction per bond
-        @test interaction(1.0, [0.0, 0.0]; kw..., lookup = hubbard) ≈ Diagonal([onsite, 0, 0, -onsite])
-        @test interaction(1.0, [0.0, 0.0]; kw..., lookup = coulomb) ≈ Diagonal([onsite, 0, 0, -(onsite + tail)])
+        @test interaction(1.0, [0.0, 0.0]; kw..., lookup = hubbard) ≈ Diagonal([-onsite, onsite, onsite, onsite])
+        @test interaction(1.0, [0.0, 0.0]; kw..., lookup = coulomb) ≈ Diagonal([-(onsite + tail), onsite, onsite, onsite])
     end
 
     @testset "V(q) is the lattice sum of 1/r" begin
         q   =   [0.37, -1.21]
         Vq  =   sum(exp(-1im * dot(q, [x, y])) / hypot(x, y) for x in -3:3, y in -3:3 if 0 < hypot(x, y) <= 2.5)
         V   =   interaction(1.0, q; kw..., lookup = coulomb)
-        @test V[1, 1] ≈ onsite
-        @test V[4, 4] ≈ -(onsite + Vq)
-        @test maximum(abs.(V[2:3, :])) == 0 && maximum(abs.(V[:, 2:3])) == 0
+        ##### physical slots: the tail is charge only, N; the three spin slots hold the same U
+        @test V[1, 1] ≈ -(onsite + Vq)
+        @test V[2, 2] == V[3, 3] == V[4, 4] ≈ onsite
+        @test maximum(abs.(V - Diagonal(diag(V)))) == 0
     end
 
     ##### two sites: the A-B tail lands off the diagonal, the A-A tail on it
@@ -50,10 +51,10 @@
         V0          =   interaction(1.0, [0.0, 0.0]; primitives = huc.primitives, subs = 2, localDim = 4,
                                     lookup = case_lookup(hp, hcases["Coulomb"]))
         ##### within 1.01: three A-B neighbours at 1/sqrt(3) (the next are at 2/sqrt(3)), six A-A at 1
-        @test real(V0[4, 4]) ≈ -(onsite + 6)
-        @test real(V0[8, 8]) ≈ -(onsite + 6)
-        @test real(V0[4, 8]) ≈ -3 * sqrt(3)
-        @test real(V0[1, 1]) ≈ onsite && V0[1, 5] == 0
+        @test real(V0[1, 1]) ≈ -(onsite + 6)
+        @test real(V0[5, 5]) ≈ -(onsite + 6)
+        @test real(V0[1, 5]) ≈ -3 * sqrt(3)
+        @test real(V0[4, 4]) ≈ onsite && V0[4, 8] == 0
     end
 
     @testset "argument checks" begin

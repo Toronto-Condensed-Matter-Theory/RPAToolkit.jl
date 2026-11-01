@@ -81,7 +81,7 @@ can carry keys for other tools (the examples carry `coulomb:` for their own inte
 | `strengths.lower`, `.upper`, `.n` | optional | strengths at which `plot = true` draws ``\chi_\mathrm{RPA}``. Default `0, 10, 6`. |
 | `triqs_environment` | optional | the Python launcher, e.g. `mpirun -n 8 python3`. Default: `$TRIQS_ENVIRONMENT`, else `python3`. |
 | `bubble` | optional | `lindhard` (default; the exact Matsubara sum, ``O(N_k^2)``) or `dlr` (imaginary-time FFT bubble, roughly linear in ``N_k``; uses `w_max`, default 20, and `dlr_err`, default 1e-12) |
-| `bubble_spin` | optional | `auto` (default; spinless bubble when the model allows it) or `full` |
+| `bubble_spin` | optional | `auto` (default; the spinless bubble without spin-orbit coupling, and only the channel pairs the model's spin symmetry allows, see [Spin-orbit coupling and spin sectors](@ref)) or `full` (the spinful bubble and all sixteen channel pairs) |
 | `bilinear_basis` | optional | `per_orbital` (default) or `closed`. Must match the interaction builder. |
 | `bilinear_seed` | optional | for `closed`: `kanamori` (default; densities plus on-site off-diagonal bilinears) or `density` |
 | `name` | optional | replaces the file name in the default interactions path |
@@ -93,7 +93,7 @@ can carry keys for other tools (the examples carry `coulomb:` for their own inte
 |:-----|:-----------|:---------|
 | `unitcell.triqs` | `run_bare` | the hoppings in TRIQS form ([`parse_unitcell`](@ref)) |
 | `<output>_runtime_input.yml` | `run_bare` | the resolved config: absolute paths, k-points as coordinates, and the scan as both `mus.values` and `fillings.values`. `run_rpa` reads the chemical potentials from here. |
-| `<output>_beta=<beta>_mu=<mu>.npz` | `run_bare` | one bubble: `chi_NN`, `chi_XX`, `chi_YY`, `chi_ZZ` on the grid `ks` (shape `n_q x d x d`), the same with `_path` along the k-path (interpolated from the grid), plus `beta`, `mu`, `filling`, `primitives`, `reciprocal`, `path`, `path_plot`, `path_ticks`, `bands` (along the path) and `bandwidth`. On the closed basis also `bilinear_basis`. |
+| `<output>_beta=<beta>_mu=<mu>.npz` | `run_bare` | one bubble: `chi_NN`, `chi_XX`, `chi_YY`, `chi_ZZ` on the grid `ks` (shape `n_q x d x d`), and with spin-orbit coupling the off-diagonal pairs `chi_NZ`, `chi_XY`, ... ([`pair_label`](@ref)); the same with `_path` along the k-path (interpolated from the grid); `spin_symmetry` (the index into [`SPIN_SYMMETRIES`](@ref)); plus `beta`, `mu`, `filling`, `primitives`, `reciprocal`, `path`, `path_plot`, `path_ticks`, `bands` (along the path) and `bandwidth`. On the closed basis also `bilinear_basis`. |
 | [`rpa_output_path`](@ref) | `run_rpa` | the combined output, below |
 
 ## The combined output
@@ -106,8 +106,10 @@ A `Dict` with one entry per chemical potential, keyed `"beta=<beta>_mu=<mu>"`, e
 | `"triqs_data"` | the bubble `.npz`, as read |
 | `"combined_chis"`, `"combined_chis_path"` | ``\chi(q)`` on the grid and along the path, one `4d x 4d` matrix per momentum ([`combine_chis`](@ref)) |
 | `"chi_orientation"` | the convention of those matrices ([`CHI_ORIENTATION`](@ref)) |
+| `"spin_symmetry"` | `"SU2"`, `"U1z"` or `"none"`: which channel pairs ``\chi`` holds, and the sectors the RPA was solved in ([`spin_sectors`](@ref)) |
+| `"vertex_slots"` | the layout of the interaction matrices ([`VERTEX_SLOTS`](@ref)) |
 | `"<case>_interaction"`, `"<case>_interaction_path"` | ``V(q)`` of each case at unit strength, on the grid and along the path |
-| `"<case>"` | the [`find_instability`](@ref) result: `"critical strength"`, and at that strength the minimum/maximum eigenvalues of ``\chi_\mathrm{RPA}``, their eigenvectors, and the momenta they sit at |
+| `"<case>"` | the [`find_instability`](@ref) result: `"critical strength"`, the `"unstable sector"`, and at that strength the minimum/maximum eigenvalues of ``\chi_\mathrm{RPA}``, their eigenvectors, and the momenta they sit at |
 | `"bilinear_basis"`, `"basis_dim"` | on the closed basis only |
 
 The grid momenta are `output[key]["triqs_data"]["contracted"]` (Cartesian, one row per momentum).

@@ -4,6 +4,12 @@ include("./Bare/parse_model.jl")
 using .parse_model
 export parse_unitcell
 
+# The spin symmetry of a model and the channel sectors it makes chi and V block diagonal in.
+include("SpinSectors.jl")
+using .SpinSectors
+export SPIN_SYMMETRIES, VERTEX_SLOTS, channel_pairs, pair_label, spin_symmetry,
+       stored_spin_symmetry, spin_sectors, off_sector_norm
+
 include("Preprocess.jl")
 using .Preprocess
 export dress_primitives, dress_reciprocal, combine_chis, get_reciprocal_ks, CHI_ORIENTATION
@@ -32,7 +38,7 @@ export kanamori_vertex, project_vertex, channel_blocks, uncovered_bilinears,
 
 include("Response.jl")
 using .Response
-export perform_RPA, minima, maxima, find_instability, effective_interaction
+export perform_RPA, minima, maxima, find_instability, effective_interaction, sector_plan
 
 include("Plotting.jl")
 using .Plotting

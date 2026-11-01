@@ -5,7 +5,7 @@ makedocs(
     build       =   "build" ,
     sitename    =   "RPAToolkit.jl"    ,
     checkdocs   =   :exports    ,
-    modules     =   [RPAToolkit.Pipeline, RPAToolkit.InputParser, RPAToolkit.Interactions, RPAToolkit.Response, RPAToolkit.Preprocess, RPAToolkit.parse_model, RPAToolkit.BilinearBasis, RPAToolkit.BilinearVertex, RPAToolkit.Plotting]   ,
+    modules     =   [RPAToolkit.Pipeline, RPAToolkit.InputParser, RPAToolkit.Interactions, RPAToolkit.Response, RPAToolkit.Preprocess, RPAToolkit.SpinSectors, RPAToolkit.parse_model, RPAToolkit.BilinearBasis, RPAToolkit.BilinearVertex, RPAToolkit.Plotting]   ,
     pages = [
         "Introduction"              =>  "index.md",
         "Running a calculation"     =>  "running.md",
@@ -17,6 +17,7 @@ makedocs(
             "Interactions"          =>  "Interactions.md",
             "Response"              =>  "Response.md",
             "Preprocess"            =>  "Preprocess.md",
+            "SpinSectors"           =>  "SpinSectors.md",
             "ParseModel"            =>  "ParseModel.md",
             "BilinearBasis"         =>  "BilinearBasis.md",
             "BilinearVertex"        =>  "BilinearVertex.md",

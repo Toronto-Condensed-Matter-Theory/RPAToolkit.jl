@@ -111,17 +111,64 @@ def spinless_unitcell(unitcell) -> dict:
             "hopping matrices": np.asarray(unitcell["hopping matrices"])[:, 0::2, 0::2]}
 
 
+#####* ---------------------------------------------------------------------- #
+#####* Spin symmetry and the channel pairs it leaves nonzero.
+#####*
+#####* chi^{mu nu} = <(M_i (x) sigma^mu/2) (M_j (x) sigma^nu/2)> is a 4 x 4 matrix in the
+#####* channels (N, X, Y, Z) for every orbital pair. How many of its entries can be
+#####* nonzero is fixed by the spin rotations H commutes with:
+#####*
+#####*   SU2   H = h (x) 1. chi^{mu nu} = delta_{mu nu} chi0 / 2: ONE spinless bubble,
+#####*         the same in all four diagonal channels (spin factorization above).
+#####*   U1z   no spin-flip hopping, up != down (Ising SOC). S_z is conserved, so chi
+#####*         only connects operators of equal S_z charge: N, Z (charge 0) among
+#####*         themselves and X, Y (charges +-1) among themselves. Two sectors, eight
+#####*         pairs: NN NZ ZN ZZ and XX XY YX YY. chi^{NZ} and chi^{XY} are real
+#####*         physics here (a Zeeman field gives the first, Ising SOC the second).
+#####*   none  anything else. All sixteen pairs.
+#####*
+#####* "Exactly", like spin_factorizable: the zero blocks are an identity only when
+#####* the spin-flip entries are exactly zero, which is how TightBindingToolkit
+#####* writes a diag(1, 0) spin matrix. The U1z run still measures the pairs it
+#####* skips once (run_bare.py), rather than assuming they vanish.
+#####* ---------------------------------------------------------------------- #
+SPIN_SYMMETRIES = ("SU2", "U1z", "none")   # stored in the .npz as the index
+CHANNELS = "NXYZ"
+
+CHANNEL_PAIRS = {
+    "SU2":  [(0, 0), (1, 1), (2, 2), (3, 3)],
+    "U1z":  [(0, 0), (0, 3), (3, 0), (3, 3), (1, 1), (1, 2), (2, 1), (2, 2)],
+    "none": [(a, b) for a in range(4) for b in range(4)],
+}
+
+
+def pair_label(a: int, b: int) -> str:
+    """The .npz key of the (a, b) channel pair: chi_NN, chi_NZ, chi_XY, ..."""
+    return "chi_" + CHANNELS[a] + CHANNELS[b]
+
+
+def spin_symmetry(unitcell) -> str:
+    """"SU2", "U1z" or "none": the largest of the three spin symmetries H has exactly."""
+    if spin_factorizable(unitcell):
+        return "SU2"
+    H = np.asarray(unitcell["hopping matrices"])
+    if H.shape[-1] % 2 == 0 and not np.any(H[:, 0::2, 1::2]) and not np.any(H[:, 1::2, 0::2]):
+        return "U1z"
+    return "none"
+
+
 #####* returns S^a at site i of total sites N where S^a = [rho, Sx, Sy, Sz, rho].
 def S(i:int, direction:int, N: int) -> np.matrix:
     mat = np.zeros((2*N, 2*N), dtype=np.complex128)
     mat[2*i:2*i+2, 2*i:2*i+2] = paulis[direction]/2
-    
+
     return mat
 
-#####* contract the full rank-4 susceptibility tensor to return a matrix
-def chi_contraction(chi, i:int, j:int, direction:int, N: int):
+#####* contract the full rank-4 susceptibility tensor to return a matrix.
+#####* `direction2` is the channel of the second operator, the first's when omitted.
+def chi_contraction(chi, i:int, j:int, direction:int, N: int, direction2=None):
     Si = S(i, direction, N)
-    Sj = S(j, direction, N)
+    Sj = S(j, direction if direction2 is None else direction2, N)
     
     chi_contracted = chi[0, 0, 0, 0].copy()
     chi_contracted.data[:] = np.einsum('wqabcd,ab,cd->wq', chi.data, Si, Sj)[:, :]
@@ -141,20 +188,24 @@ def interpolate_chi(chi_contracted, ks):
 
 #####* interpolate the contracted susceptibility tensor along a high symmetry path in the Brillouin zone
 #####* spin_factorized: `chi` is the spinless bubble of a spin_factorizable model; the result is the
-#####* same contraction of the spinful one (direction drops out).
-def interpolate_chi_mat(chi, direction:int, N: int, ks, spin_factorized: bool = False):
+#####* same contraction of the spinful one (direction drops out, and only diagonal pairs exist).
+#####* direction2: the second operator's channel, for an off-diagonal pair (a, b).
+def interpolate_chi_mat(chi, direction:int, N: int, ks, spin_factorized: bool = False,
+                        direction2=None):
+    if spin_factorized and direction2 not in (None, direction):
+        raise ValueError("a spin-factorized bubble has no off-diagonal channel pairs")
 
     chiMats = np.zeros([ks.shape[0], N, N], dtype=complex)
-    
+
     for i in range(N):
         for j in range(N):
-            
+
             if spin_factorized:
                 Ei, Ej = np.diag(np.eye(N)[i]), np.diag(np.eye(N)[j])
                 chi_contracted = chi_contraction_ops(chi, Ei, Ej)
                 chiMats[:, i, j] += SPIN_FACTOR * interpolate_chi(chi_contracted, ks)
             else:
-                chi_contracted = chi_contraction(chi, i, j, direction, N)
+                chi_contracted = chi_contraction(chi, i, j, direction, N, direction2)
                 chiMats[:, i, j] += interpolate_chi(chi_contracted, ks)
     
     return chiMats
@@ -222,12 +273,14 @@ def chi_matrix_on_basis(chi, basis, direction: int, spin_factorized: bool = Fals
     return factor * out
 
 
-def interpolate_chi_basis(chi, basis, direction: int, ks, spin_factorized: bool = False):
+def interpolate_chi_basis(chi, basis, direction: int, ks, spin_factorized: bool = False,
+                          direction2=None):
     """chi_kl interpolated onto `ks`, the basis-generalised interpolate_chi_mat."""
     ops, factor = _basis_ops(basis, direction, spin_factorized)
+    ops2 = ops if direction2 in (None, direction) else _basis_ops(basis, direction2, spin_factorized)[0]
     d = len(ops)
     out = np.zeros((ks.shape[0], d, d), dtype=complex)
     for i in range(d):
         for j in range(d):
-            out[:, i, j] = interpolate_chi(chi_contraction_ops(chi, ops[i], ops[j]), ks)
+            out[:, i, j] = interpolate_chi(chi_contraction_ops(chi, ops[i], ops2[j]), ks)
     return factor * out

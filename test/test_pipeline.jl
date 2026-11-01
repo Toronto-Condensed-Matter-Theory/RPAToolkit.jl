@@ -56,7 +56,8 @@
             uc, hopping     =   square_model()
             save(input["unitcell"]["julia"], Dict("unit cell" => uc, "parameters" => hopping))
             params, cases   =   hubbard_coulomb_interactions(square_uc(); onsite = 1.0, range = 1.0)
-            save(input["interactions"], Dict("parameters" => params, "values" => cases, "unit cell" => square_uc()))
+            ints    =   Dict("parameters" => params, "values" => cases, "unit cell" => square_uc())
+            save(input["interactions"], ints)        # no "vertex_slots": refused below
 
             n       =   6
             ks      =   [[2pi * i / n, 2pi * j / n, 0.0] for i in 0:n-1 for j in 0:n-1]
@@ -75,15 +76,86 @@
             end
             npzwrite(input["output"] * "_beta=10.0_mu=0.0.npz", bubble)
 
+            ##### an interaction file without the slot layout reads as the old convention: refused
+            @test_throws ErrorException run_rpa(config)
+            save(input["interactions"], merge(ints, Dict("vertex_slots" => VERTEX_SLOTS)))
+
+            ##### the bubble predates `spin_symmetry`; the model is SU2, so its four diagonal pairs are all of chi
             output  =   run_rpa(config)
             entry   =   output["beta=10.0_mu=0.0"]
             @test abs(entry["Hubbard"]["critical strength"] - 1 / (2 * 0.15)) < 1e-8
+            @test entry["Hubbard"]["unstable sector"] == "spin"
+            @test entry["spin_symmetry"] == "SU2"
+            @test entry["vertex_slots"] == VERTEX_SLOTS
             @test entry["filling"] == 0.5
             @test entry["chi_orientation"] == CHI_ORIENTATION
             @test length(entry["Hubbard_interaction"]) == n^2
             @test length(entry["Coulomb_interaction_path"]) == length(path)
             @test isfile(rpa_output_path(input))
             @test haskey(load(rpa_output_path(input)), "beta=10.0_mu=0.0")
+        end
+    end
+
+    ##### Ising SOC: S_z is conserved, so chi has the {N, Z} and {X, Y} sectors, with cross terms.
+    ##### Stored (half, per-spin) chi: NN = ZZ = a, NZ = ZN = c, XX = YY = b, XY = -YX = i e. With
+    ##### Hubbard U = 1 the transverse sector goes first, at 2 (b + e)_max U = 1, and the
+    ##### longitudinal one would need 2 sqrt(a^2 - c^2) U = 1.
+    @testset "run_rpa with Ising spin-orbit coupling" begin
+        mktempdir() do dir
+            config  =   joinpath(dir, "ising.yml")
+            write(config, """
+                beta: 10.0
+                directions: [0, 1, 2, 3]
+                mus:
+                  values: [0.0]
+                instability: {lower: 0.0, upper: 10.0}
+                """)
+            input   =   load_rpa_input(config)
+
+            uc, hopping     =   ising_model()
+            @test spin_symmetry(uc) == "U1z"
+            @test spin_symmetry(square_model()[1]) == "SU2"
+            save(input["unitcell"]["julia"], Dict("unit cell" => uc, "parameters" => hopping))
+            params, cases   =   hubbard_coulomb_interactions(triangular_uc(); onsite = 1.0, range = 0.0)
+            save(input["interactions"], Dict("parameters" => params, "values" => cases,
+                                             "unit cell" => triangular_uc(), "vertex_slots" => VERTEX_SLOTS))
+
+            n       =   6
+            ks      =   [[2pi * i / n, 2pi * j / n, 0.0] for i in 0:n-1 for j in 0:n-1]
+            path    =   [[2pi * t / 8, 0.0, 0.0] for t in 0:8]
+            parts   =   Dict("NN" => k -> 0.12, "ZZ" => k -> 0.12, "NZ" => k -> 0.03, "ZN" => k -> 0.03,
+                             "XX" => k -> 0.1 + 0.05 * cos(k[1]), "YY" => k -> 0.1 + 0.05 * cos(k[1]),
+                             "XY" => k -> 0.02im, "YX" => k -> -0.02im)
+            bubble  =   Dict{String, Any}("beta" => 10.0, "mu" => 0.0, "filling" => 0.5,
+                                          "primitives" => [1.0 0.0; -0.5 sqrt(3)/2],
+                                          "ks" => reduce(vcat, permutedims.(ks)), "contracted" => reduce(vcat, permutedims.(ks)),
+                                          "path" => reduce(vcat, permutedims.(path)),
+                                          "path_plot" => collect(range(0, 1, length = length(path))), "path_ticks" => [0.0, 1.0])
+            for (pair, f) in parts
+                bubble["chi_" * pair]           =   reshape(ComplexF64[f(k) for k in ks], :, 1, 1)
+                bubble["chi_" * pair * "_path"] =   reshape(ComplexF64[f(k) for k in path], :, 1, 1)
+            end
+            file    =   input["output"] * "_beta=10.0_mu=0.0.npz"
+
+            ##### without `spin_symmetry` the file could be an old diagonal-only bubble: refused for a U1z model
+            npzwrite(file, bubble)
+            @test_throws ErrorException run_rpa(config)
+
+            bubble["spin_symmetry"] = [1]
+            npzwrite(file, bubble)
+            entry   =   run_rpa(config)["beta=10.0_mu=0.0"]
+            @test entry["spin_symmetry"] == "U1z"
+            @test entry["Hubbard"]["unstable sector"] == "transverse"
+            @test abs(entry["Hubbard"]["critical strength"] - 1 / (2 * (0.15 + 0.02))) < 1e-8
+            chi     =   entry["combined_chis"][1]
+            @test off_sector_norm(chi, spin_sectors("U1z", 1)) == 0
+            @test chi[1, 4] == chi[4, 1] == 2 * 0.03
+            @test chi[2, 3] == -chi[3, 2] != 0
+
+            ##### a bubble missing one of its sector's pairs is an error, not a zero
+            delete!(bubble, "chi_XY")
+            npzwrite(file, bubble)
+            @test_throws ErrorException run_rpa(config)
         end
     end
 end

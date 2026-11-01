@@ -7,6 +7,7 @@ include("fixtures.jl")
 
 @testset "RPAToolkit.jl" begin
     include("test_bubble_symmetry.jl")
+    include("test_spin_bubble.jl")
     include("test_bilinear_vertex.jl")
     include("test_bilinear_basis.jl")
     include("test_interactions.jl")
