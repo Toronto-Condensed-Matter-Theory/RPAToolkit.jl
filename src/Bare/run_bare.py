@@ -265,18 +265,12 @@ if __name__=="__main__":
 
     tasks = [(index, mu, fillings[index]) for index, mu in enumerate(mus)]
 
-    if mpi_size > 1:
-        # TRIQS parallelizes internally over k-points via MPI
-        for task in tasks:
-            compute_for_filling(task)
-    else:
-        # No MPI: parallelize over fillings using multiprocessing
-        import multiprocessing
-        num_cores = multiprocessing.cpu_count()
-        print(f"No MPI detected. Using multiprocessing over fillings with {num_cores} cores.")
-        with multiprocessing.Pool(processes=num_cores) as pool:
-            pool.map(compute_for_filling, tasks)
-
-    
+    # Under MPI, TRIQS spreads each bubble's k-points over the ranks. Without it the fillings run
+    # one after another: a multiprocessing pool cannot pickle compute_for_filling (a closure), and
+    # spawned workers re-import TRIQS and hang. Launch with `mpirun -n N python3` to parallelize.
+    if mpi_size == 1:
+        print("No MPI detected: computing the fillings serially.")
+    for task in tasks:
+        compute_for_filling(task)
 
 

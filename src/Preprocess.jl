@@ -17,7 +17,12 @@ untransposed, and the first fixed files ("O(-q)O(q)") were still half the per-sp
 """
 const CHI_ORIENTATION = "O(-q)O(q), per-spin chi0"
 
-#####* Return a vector of the three 3-d real-space primitive vectors from input dictionary
+"""
+    dress_primitives(data; entry = "primitives") -> Vector{Vector{Float64}}
+
+The real-space primitive vectors stored as the rows of `data[entry]` (a bare-stage `.npz`), as a
+vector of vectors.
+"""
 function dress_primitives(data::Dict ; entry::String = "primitives")::Vector{Vector{Float64}}
     primitives = data[entry]
     primitives = Vector{eltype(data[entry])}[eachrow(data[entry])...]
@@ -28,14 +33,24 @@ function dress_primitives(data::Dict ; entry::String = "primitives")::Vector{Vec
     return primitives
 end
 
-#####* Returns a vector of the three 3d reciprocal vectors from input dictionary
+"""
+    dress_reciprocal(data; entry = "reciprocal") -> Vector{Vector{Float64}}
+
+The reciprocal lattice vectors stored as the rows of `data[entry]` (a bare-stage `.npz`), as a
+vector of vectors.
+"""
 function dress_reciprocal(data::Dict ; entry::String = "reciprocal")::Vector{Vector{Float64}}
     reciprocal = data[entry]
     reciprocal = Vector{eltype(data[entry])}[eachrow(data[entry])...]
     return reciprocal
 end
 
-#####* returns a vector of vectors of all momenta in the BZ in units of the reciprocal lattice vectors.
+"""
+    get_reciprocal_ks(data; entry = "ks") -> Vector{Vector{Float64}}
+
+The momenta stored as the rows of `data[entry]`, projected on the three primitive vectors
+(`k . a_i`), i.e. in units of the reciprocal lattice vectors times `2pi`.
+"""
 function get_reciprocal_ks(data::Dict ; entry::String = "ks")::Vector{Vector{Float64}}
     primitives = dress_primitives(data)
     ks = Vector{eltype(data[entry])}[eachrow(data[entry])...]
@@ -50,7 +65,6 @@ function get_reciprocal_ks(data::Dict ; entry::String = "ks")::Vector{Vector{Flo
     return Ks
 end
 
-#####* returns a vector of (sublattice x spin) susceptibility matrices where the vector corresponds to different momentas.
 """
     combine_chis(data; directions, subs = nothing, suffix = "")
 
@@ -126,8 +140,5 @@ function combine_chis(data::Dict ; directions::Vector{Int},
 
     return chi_combined
 end
-
-
-
 
 end

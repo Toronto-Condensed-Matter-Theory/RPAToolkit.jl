@@ -1,2 +1,11 @@
 /Manifest.toml
+/docs/Manifest.toml
+docs/build/
+.history/
+.vscode/
+__pycache__/
 *.pyc
+*.jld2
+*.npz
+*.h5
+examples/*/data/

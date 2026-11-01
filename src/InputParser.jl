@@ -4,41 +4,55 @@ using YAML
 
 export load_rpa_input
 
-function load_rpa_input(filepath::String)
+"""
+    load_rpa_input(filepath) -> Dict
+
+Read an RPAToolkit YAML config and fill in its file paths.
+
+Every path is absolute on return. Relative ones (`data_dir`, `output`, `plots`, `interactions`,
+`unitcell.julia`, `unitcell.triqs`, `gap_equation_rpa.rpa_data`) are taken relative to the
+directory of the YAML file, not the working directory, and `~` is expanded. Missing ones default
+to files in `data_dir` (itself defaulting to the YAML's directory), named after the YAML file
+`<name>.yml`:
+
+| key                         | default                              |
+|:----------------------------|:-------------------------------------|
+| `output`, `plots`           | `<data_dir>/<name>_` (a file prefix) |
+| `interactions`              | `<data_dir>/<name>_interactions.jld2` (`<name>` from the `name` key if set) |
+| `unitcell.julia`            | `<data_dir>/<name>_dos_scan_data.jld2` |
+| `unitcell.triqs`            | `<data_dir>/<name>_triqs.npz`        |
+| `gap_equation_rpa.rpa_data` | `<data_dir>/<name>_combined_new.jld2`, only if `gap_equation_rpa` exists |
+"""
+function load_rpa_input(filepath::AbstractString)
+    filepath = abspath(filepath)
     input = YAML.load_file(filepath)
-    
-    file_prefix = replace(basename(filepath), r"\.yml$" => "")
+    base_dir = dirname(filepath)
+
+    resolve(path) = (p = expanduser(String(path)); isabspath(p) ? p : normpath(joinpath(base_dir, p)))
+
+    file_prefix = replace(basename(filepath), r"\.ya?ml$" => "")
     base_name = get(input, "name", file_prefix)
-    data_dir = get(input, "data_dir", "/mnt/home/ahardy/ceph/Data/RPA")
-    
+    data_dir = resolve(get(input, "data_dir", base_dir))
+    input["data_dir"] = data_dir
+
     default_prefix = joinpath(data_dir, file_prefix * "_")
-    
-    if !haskey(input, "output")
-        input["output"] = default_prefix
-    end
-    if !haskey(input, "plots")
-        input["plots"] = default_prefix
-    end
-    if !haskey(input, "interactions")
-        input["interactions"] = joinpath(data_dir, base_name * "_interactions.jld2")
-    end
-    
+
+    input["output"] = resolve(get(input, "output", default_prefix))
+    input["plots"] = resolve(get(input, "plots", default_prefix))
+    input["interactions"] = resolve(get(input, "interactions", joinpath(data_dir, base_name * "_interactions.jld2")))
+
     if !haskey(input, "unitcell")
         input["unitcell"] = Dict{Any,Any}()
     end
-    if !haskey(input["unitcell"], "julia")
-        input["unitcell"]["julia"] = joinpath(data_dir, file_prefix * "_dos_scan_data.jld2")
-    end
-    if !haskey(input["unitcell"], "triqs")
-        input["unitcell"]["triqs"] = joinpath(data_dir, file_prefix * "_triqs.npz")
-    end
-    
+    unitcell = input["unitcell"]
+    unitcell["julia"] = resolve(get(unitcell, "julia", joinpath(data_dir, file_prefix * "_dos_scan_data.jld2")))
+    unitcell["triqs"] = resolve(get(unitcell, "triqs", joinpath(data_dir, file_prefix * "_triqs.npz")))
+
     if haskey(input, "gap_equation_rpa")
-        if !haskey(input["gap_equation_rpa"], "rpa_data")
-            input["gap_equation_rpa"]["rpa_data"] = joinpath(data_dir, file_prefix * "_combined_new.jld2")
-        end
+        gap = input["gap_equation_rpa"]
+        gap["rpa_data"] = resolve(get(gap, "rpa_data", joinpath(data_dir, file_prefix * "_combined_new.jld2")))
     end
-    
+
     return input
 end
 

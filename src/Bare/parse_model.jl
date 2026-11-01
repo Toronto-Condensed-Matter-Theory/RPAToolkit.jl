@@ -5,6 +5,15 @@ using TightBindingToolkit, LinearAlgebra, NPZ
 export parse_unitcell
 
 
+"""
+    parse_unitcell(uc::UnitCell) -> Dict{String, Any}
+    parse_unitcell(uc::UnitCell, fileName)
+
+The hopping model of a TightBindingToolkit `UnitCell` in the form the TRIQS stage reads:
+`"units"` (primitives, padded to 3D, as columns), `"orbital_positions"` (one column per
+spin-orbital), and `"hopping matrices"` / `"hopping offsets"` with every bond's Hermitian
+conjugate filled in at the opposite offset. With a `fileName`, writes it as an `.npz`.
+"""
 function parse_unitcell(uc::UnitCell ;)::Dict{String, Any}
 
     output = Dict{String, Any}()

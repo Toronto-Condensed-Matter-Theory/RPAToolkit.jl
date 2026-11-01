@@ -5,10 +5,17 @@ using ..RPAToolkit.Interactions: interaction
 
 export perform_RPA, minima, maxima, find_instability, effective_interaction
 
-#####* Returns the eigenvalues and eigenvectors of the RPA susceptibility matrix at some fixed momentum.
+"""
+    perform_RPA(chi, V; return_matrix = false)
+
+The RPA susceptibility `chi_RPA = (1 - chi V)^-1 chi` at one momentum, returned as the matrix
+(`return_matrix = true`) or as its `(eigenvalues, eigenvectors)`, sorted by real part.
+
+With vectors of `chi` and `V` (one per momentum), returns a vector of those.
+"""
 function perform_RPA(chi::Matrix{ComplexF64}, interaction::Matrix{ComplexF64} ;
         return_matrix::Bool = false)
-    mat = inv(I - chi * interaction) * chi
+    mat = (I - chi * interaction) \ chi
 
     if return_matrix
         return mat
@@ -22,13 +29,16 @@ function perform_RPA(chi::Matrix{ComplexF64}, interaction::Matrix{ComplexF64} ;
     end
 end
 
-#####* Returns the eigenvalues and eigenvectors of the RPA susceptibility matrix at multiple momenta ks.
 function perform_RPA(chis::Vector{Matrix{ComplexF64}}, interactions::Vector{Matrix{ComplexF64}} ;
         return_matrix::Bool = false)
     return perform_RPA.(chis, interactions ; return_matrix = return_matrix)
 end
 
-#####* Returns the RPA renormalized interaction V_eff(q) = V(q) + V(q) chi_RPA(q) V(q)
+"""
+    effective_interaction(chi_bare, V) -> V + V chi_RPA V
+
+The RPA-renormalized interaction at one momentum, or at each momentum for vectors of matrices.
+"""
 function effective_interaction(chi_bare::Matrix{ComplexF64}, interaction::Matrix{ComplexF64})
     chi_rpa = perform_RPA(chi_bare, interaction; return_matrix = true)
     return interaction + interaction * chi_rpa * interaction
@@ -38,7 +48,12 @@ function effective_interaction(chis_bare::Vector{Matrix{ComplexF64}}, interactio
     return effective_interaction.(chis_bare, interactions)
 end
 
-#####* returns the eigenvalue and eigenvector corresponding to the minimum eigenvalue over all momenta.
+"""
+    minima(eigenstates) -> Dict
+
+The lowest eigenvalue over all momenta of a `perform_RPA` result, with its momentum index and
+eigenvector, under the keys `"minimum eigenvalue"`, `"minimum index"`, `"minimum eigenvector"`.
+"""
 function minima(eigenstates::Vector{Tuple{Vector{ComplexF64}, Matrix{ComplexF64}}})::Dict{String, Any}
 
     eigenvalues = getindex.(eigenstates, 1)
@@ -51,7 +66,12 @@ function minima(eigenstates::Vector{Tuple{Vector{ComplexF64}, Matrix{ComplexF64}
                 "minimum eigenvector" => eigenvectors[index][:, 1])
 end
 
-#####* returns the eigenvalue and eigenvector corresponding to the maximum eigenvalue over all momenta.
+"""
+    maxima(eigenstates) -> Dict
+
+The highest eigenvalue over all momenta of a `perform_RPA` result, with its momentum index and
+eigenvector, under the keys `"maximum eigenvalue"`, `"maximum index"`, `"maximum eigenvector"`.
+"""
 function maxima(eigenstates::Vector{Tuple{Vector{ComplexF64}, Matrix{ComplexF64}}})::Dict{String, Any}
 
     eigenvalues = getindex.(eigenstates, 1)
@@ -67,18 +87,23 @@ end
 
 
 """
-    find_instability(chis, ks, V_unit; steps, lower, upper, primitives)
+    find_instability(chis, ks, V_unit; steps = 32, lower = 0.0, upper = 10.0, primitives)
+    find_instability(chis, ks; steps, lower, upper, primitives, subs, localDim, lookup)
 
-The same binary search, but against interaction matrices that are already
-built. `interaction(strength, ks) == strength * interaction(1.0, ks)` exactly,
-so the bisection only needs to rescale them.
+The critical interaction strength: a bisection on `[lower, upper]` for the smallest `s` at which
+`chi_RPA = (1 - chi s V)^-1 chi` acquires a negative eigenvalue at some momentum. `V_unit` are the
+interaction matrices at unit strength on the same momenta `ks` as `chis`; the second form builds
+them from a bond `lookup` with [`interaction`](@ref). If nothing goes unstable below `upper`, the
+result is `upper` (to the bisection's resolution).
 
-This is the form the caller wants whenever the matrices do not come from a
-`Lookup` at all -- a vertex projected onto a symmetry-closed bilinear basis is
-one constant matrix per q, with no bonds to walk -- and it is also what keeps
-the search from rebuilding the same matrices 32 times per case and mu. On the
-ZrNCl Coulomb case (7419 bonds on a 297 x 297 grid) that rebuild is the whole
-cost of the stage.
+Returns a `Dict` with `"critical strength"` plus, from `chi_RPA` at that strength, the
+[`minima`](@ref) and [`maxima`](@ref) entries and the momenta they sit at (`"minimum momentum"`,
+`"maximum momentum"`, and their `"... reciprocal momentum"` in units of the reciprocal vectors).
+
+Only one `chi_RPA` is diagonalized, at the end. For a positive semidefinite `chi`,
+`chi^{1/2} (1 - s A)^-1 chi^{1/2}` with `A = chi^{1/2} V chi^{1/2}` has a negative eigenvalue
+exactly when `s λ > 1` for an eigenvalue `λ` of `chi V` (Sylvester's law of inertia), so every
+bisection step compares `s` against the largest such `λ` over all momenta, computed once.
 """
 function find_instability(chis::Vector{Matrix{ComplexF64}}, ks::Vector{Vector{Float64}},
         V_unit::Vector{Matrix{ComplexF64}};
@@ -88,23 +113,19 @@ function find_instability(chis::Vector{Matrix{ComplexF64}}, ks::Vector{Vector{Fl
     length(V_unit) == length(chis) ||
         error("find_instability: $(length(V_unit)) interaction matrices for $(length(chis)) " *
               "susceptibilities; they must live on the same q grid.")
-    scaled(s) = [s .* V for V in V_unit]
 
-    check = nothing
-    current = Float64[]
+    λmax = maximum(maximum(real, eigvals(chi * V)) for (chi, V) in zip(chis, V_unit))
     for _ in 1:steps
-        push!(current, (upper + lower) / 2)
-        check = minima(perform_RPA(chis, scaled(current[end])))
-        if check["minimum eigenvalue"] < -1e-6
-            upper = current[end]
+        mid = (upper + lower) / 2
+        if mid * λmax > 1
+            upper = mid
         else
-            lower = current[end]
+            lower = mid
         end
     end
 
     d = length(primitives[begin])
-    at = check["minimum eigenvalue"] < -1e-6 ? lower : current[end]
-    eigenstates = perform_RPA(chis, scaled(at))
+    eigenstates = perform_RPA(chis, [lower .* V for V in V_unit])
     check = minima(eigenstates)
     peak = maxima(eigenstates)
     k_min = ks[check["minimum index"]]
@@ -121,131 +142,9 @@ function find_instability(chis::Vector{Matrix{ComplexF64}}, ks::Vector{Vector{Fl
         steps::Int = 32, lower::Float64 = 0.0, upper::Float64 = 10.0,
         kwargs...)::Dict{String, Any}
 
-    current = Float64[]
-    check = nothing
-
-    #####* binary search for the critical interaction strength |J| at a given unit cell fixing ratios of interactions.
-    for _ in 1:steps
-        push!(current, (upper + lower) / 2)
-        ##### determining the interaction matrices.
-        interactions = interaction(current[end], ks ; kwargs...)
-        ##### RPA calculation.
-        eigenstates = perform_RPA(chis, interactions)
-
-        check = minima(eigenstates)
-
-        if check["minimum eigenvalue"] < -1e-6
-            upper = current[end]
-        else
-            lower = current[end]
-        end
-    end
-
     primitives = get(kwargs, :primitives, [[0.0, 0.0], [0.0, 0.0]])
-    d = length(primitives[begin])
-
-    if check["minimum eigenvalue"] < -1e-6
-        interactions = interaction(lower, ks ; kwargs...)
-        eigenstates = perform_RPA(chis, interactions)
-
-        check = minima(eigenstates)
-        peak = maxima(eigenstates)
-
-        k_min = ks[check["minimum index"]]
-        k_max = ks[peak["maximum index"]]
-
-        return Dict("critical strength" => lower, check..., peak...,
-                    "minimum reciprocal momentum" => dot.(Ref(k_min[1:d]), primitives) ./ (2*pi),
-                    "minimum momentum" => k_min,
-                    "maximum reciprocal momentum" => dot.(Ref(k_max[1:d]), primitives) ./ (2*pi),
-                    "maximum momentum" => k_max)
-    else
-        interactions = interaction(current[end], ks ; kwargs...)
-        eigenstates = perform_RPA(chis, interactions)
-
-        check = minima(eigenstates)
-        peak = maxima(eigenstates)
-
-        k_min = ks[check["minimum index"]]
-        k_max = ks[peak["maximum index"]]
-
-        return Dict("critical strength" => lower, check..., peak...,
-                    "minimum reciprocal momentum" => dot.(Ref(k_min[1:d]), primitives) ./ (2*pi),
-                    "minimum momentum" => k_min,
-                    "maximum reciprocal momentum" => dot.(Ref(k_max[1:d]), primitives) ./ (2*pi),
-                    "maximum momentum" => k_max)
-    end
+    return find_instability(chis, ks, interaction(1.0, ks; kwargs...);
+        steps = steps, lower = lower, upper = upper, primitives = primitives)
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 end

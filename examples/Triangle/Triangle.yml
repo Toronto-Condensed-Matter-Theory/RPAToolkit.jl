@@ -1,0 +1,23 @@
+# Triangular lattice, t = -1. Paths are relative to this file.
+data_dir: data
+
+beta: 20.0
+k_size: 48
+directions: [0, 1, 2, 3]
+fillings:
+  min: 0.3
+  max: 0.5
+  n: 5
+
+# TightBindingToolkit high-symmetry points; M1 is the midpoint of the K2''-K1 zone edge.
+k_points: [G, M1, "K2''"]
+k_labels: ['\Gamma', 'M', 'K']
+
+# On-site U and the reach of the 1/r tail, in units of e^2/(eps a) and of a.
+coulomb:
+  onsite: 4.0
+  range: 3.0
+
+instability:
+  lower: 0.0
+  upper: 10.0

@@ -1,6 +1,5 @@
 module RPAToolkit
 
-# Write your package code here.
 include("./Bare/parse_model.jl")
 using .parse_model
 export parse_unitcell
@@ -15,7 +14,7 @@ export load_rpa_input
 
 include("Interactions.jl")
 using .Interactions
-export interaction
+export interaction, HUBBARD_CHANNELS, DENSITY_CHANNELS, hubbard_coulomb_interactions
 
 # The symmetry-closed bilinear basis, and the interaction vertex projected onto
 # it. Exported from the package because both are needed OUTSIDE run_bare: an
@@ -31,7 +30,6 @@ using .BilinearVertex
 export kanamori_vertex, project_vertex, channel_blocks, uncovered_bilinears,
        basis_rotation, rotate_channel_blocks
 
-
 include("Response.jl")
 using .Response
 export perform_RPA, minima, maxima, find_instability, effective_interaction
@@ -40,6 +38,9 @@ include("Plotting.jl")
 using .Plotting
 export plot_chi
 
-
+# The two stages of a run, driven by one YAML config.
+include("Pipeline.jl")
+using .Pipeline
+export run_bare, run_rpa, rpa_output_path
 
 end
