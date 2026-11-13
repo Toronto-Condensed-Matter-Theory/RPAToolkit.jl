@@ -12,7 +12,8 @@ and a bare `1/r` Coulomb tail:
 Each folder has
 - `<Lattice>.yml`: the config (β, k-grid, fillings, k-path, and the `coulomb:` block the script reads);
 - `<Lattice>.jl`: builds the model and the interactions, then runs both stages with `run_rpa(config; run_bare = true)`;
-- `<Lattice>.ipynb`: a Julia notebook that plots the results. It covers the bands, the bare bubble, the RPA spin
+- `<Lattice>.ipynb`: a Julia notebook that plots the results. It covers the bands, the Fermi surfaces and the
+  nesting by the ordering wavevector `Q` (drawn with TightBindingToolkit's `Plot_FS!`), the bare bubble, the RPA spin
   susceptibility approaching the Stoner point, the charge channel with and without the `1/r` tail, the screened
   interaction `V + V χ_RPA V`, a map over the Brillouin zone, and the critical `U` against filling.
 
