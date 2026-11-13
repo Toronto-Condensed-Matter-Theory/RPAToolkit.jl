@@ -35,7 +35,6 @@ Features:
 using Pkg
 Pkg.add(url = "https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl")
 ```
-The MeanFieldToolkit interface is a package extension: add MeanFieldToolkit and load it.
 
 ## Quick start
 

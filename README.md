@@ -18,14 +18,13 @@ Currently supported:
 * Outputs include the critical strength, the leading instability and its momentum, the RPA susceptibility, and the screened interaction.
 * The bare bubble is computed in Julia, threaded: the exact Lindhard sum, or an imaginary-time FFT route on a discrete Lehmann representation that scales as `N_k log N_k`, for large grids.
 * Real-frequency RPA: the retarded bubble `χ₀(q, ω + iη)`, the RPA at every frequency, spectral functions unfolded from supercells, and an Ewald-summed long-range Coulomb `V(q)` for two-dimensional plasmons.
-* On top of [MeanFieldToolkit.jl](https://github.com/Toronto-Condensed-Matter-Theory/MeanFieldToolkit.jl) Hartree-Fock bands (a package extension): the RPA with the vertex built from the same interaction is time-dependent Hartree-Fock, with exact Goldstone modes in broken-symmetry states.
+* On top of [MeanFieldToolkit.jl](https://github.com/Toronto-Condensed-Matter-Theory/MeanFieldToolkit.jl) Hartree-Fock bands: the RPA with the vertex built from the same interaction is time-dependent Hartree-Fock, with exact Goldstone modes in broken-symmetry states.
 
 ## Installation
 
 `] add https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl`
 
-Everything is Julia. For the mean-field extension, also add MeanFieldToolkit and
-`using MeanFieldToolkit` next to `using RPAToolkit`.
+Everything is Julia.
 
 ## Examples
 
@@ -37,7 +36,7 @@ julia --project=. -t 4 examples/Square/Square.jl
 `examples/MeanField/` runs MeanFieldToolkit Hartree-Fock and then the real-frequency RPA on top of it: the magnons of
 the Hubbard model's Néel state and the plasmon of a dilute metal with `1/r` repulsion.
 ```
-julia --project=examples/MeanField -t 8 examples/MeanField/Magnons.jl
+julia --project=. -t 8 examples/MeanField/Magnons.jl
 ```
 See [examples/README.md](examples/README.md).
 

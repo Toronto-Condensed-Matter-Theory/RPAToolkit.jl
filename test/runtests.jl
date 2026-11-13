@@ -17,12 +17,5 @@ include("fixtures.jl")
     include("test_response.jl")
     include("test_preprocess.jl")
     include("test_pipeline.jl")
-    ##### The MeanFieldToolkit extension needs MeanFieldToolkit, which the package's own test environment
-    ##### does not carry: run it in the example environment,
-    #####     julia --project=examples/MeanField test/test_meanfield_ext.jl
-    if Base.find_package("MeanFieldToolkit") !== nothing
-        include("test_meanfield_ext.jl")
-    else
-        @info "MeanFieldToolkit is not in this environment: skipping test_meanfield_ext.jl."
-    end
+    include("test_meanfield_ext.jl")
 end

@@ -3,7 +3,7 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 RPAToolkit = "b283929e-e2c3-445a-a93e-21ce7c83cc79"
 
 [sources]
-RPAToolkit = {path = "/Users/aklekovkinhardy/Documents/Code/RPAToolkit.jl"}
+RPAToolkit = {path = ".."}
 
 [compat]
 Documenter = "1"

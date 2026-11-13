@@ -1,15 +1,15 @@
-##### The MeanFieldToolkit extension: Hartree-Fock bands + the TDHF vertex of the same interaction.
+##### The MeanFieldToolkit interface: Hartree-Fock bands + the TDHF vertex of the same interaction.
 #####
-#####     julia --project=examples/MeanField test/test_meanfield_ext.jl
+#####     julia --project=. test/test_meanfield_ext.jl
 #####
-##### (also run by runtests.jl when MeanFieldToolkit is in the environment)
+##### (also run by runtests.jl)
 
 if !isdefined(Main, :neel_hubbard)
     using Test
     include(joinpath(@__DIR__, "..", "examples", "MeanField", "common.jl"))
 end
 
-@testset "MeanFieldToolkit extension" begin
+@testset "MeanFieldToolkit interface" begin
 
     @testset "the Néel state has an exact Goldstone mode (U = $U)" for U in (4.0, 8.0)
         mft = neel_hubbard(; U, kSize = 24)

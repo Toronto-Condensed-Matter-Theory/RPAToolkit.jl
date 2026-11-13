@@ -46,10 +46,8 @@ strength than the Hubbard case.
 ## Hartree-Fock + real-frequency RPA (`MeanField/`)
 
 [MeanFieldToolkit.jl](https://github.com/Toronto-Condensed-Matter-Theory/MeanFieldToolkit.jl) solves the
-Hartree-Fock problem (Anderson mixing); `rpa_model(mft)` and `rpa_vertex(mft)` (a package extension, loaded by
-`using MeanFieldToolkit`) hand its bands and the TDHF vertex of the same interaction to the RPA. The folder has its
-own environment, which takes MeanFieldToolkit, FixedPointToolkit and TightBindingToolkit from sibling checkouts
-(`../MeanFieldToolkit.jl` and so on, see `MeanField/Project.toml`):
+Hartree-Fock problem (Anderson mixing); `rpa_model(mft)` and `rpa_vertex(mft)` hand its bands and the TDHF
+vertex of the same interaction to the RPA. The scripts run in the package environment, like the other examples:
 
 - `Magnons.jl`: the Néel state of the square-lattice Hubbard model at `U = 4, 8, 12`. Checks the Goldstone mode
   (the largest transverse eigenvalue of `χ₀V` at the ordering vector is exactly 1) and plots the transverse spin
@@ -59,8 +57,8 @@ own environment, which takes MeanFieldToolkit, FixedPointToolkit and TightBindin
   the loss function, the plasmon against `√(2π n e² q / m*)`, and the particle-hole continuum.
 
 ```
-julia --project=examples/MeanField -t 8 examples/MeanField/Magnons.jl
-julia --project=examples/MeanField -t 8 examples/MeanField/Plasmons.jl
+julia --project=. -t 8 examples/MeanField/Magnons.jl
+julia --project=. -t 8 examples/MeanField/Plasmons.jl
 ```
-Output goes to `MeanField/data/`. The extension's tests run in the same environment:
-`julia --project=examples/MeanField test/test_meanfield_ext.jl`.
+Output goes to `MeanField/data/`. The interface's tests are part of the test suite, or on their own:
+`julia --project=. test/test_meanfield_ext.jl`.

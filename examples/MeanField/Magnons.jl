@@ -1,7 +1,7 @@
 #=
 Magnons of the Hartree-Fock Néel state of the square-lattice Hubbard model, from the RPA on top of it.
 
-    julia --project=examples/MeanField -t 8 examples/MeanField/Magnons.jl
+    julia --project=. -t 8 examples/MeanField/Magnons.jl
 
 For each U:
 1. MeanFieldToolkit solves unrestricted on-site Hartree-Fock on the √2×√2 cell (Anderson mixing),

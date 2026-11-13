@@ -59,8 +59,9 @@ include("Dynamics.jl")
 using .Dynamics
 export dynamic_rpa, unfold_vector, spectral_weight, spectral_map, coulomb_2d, rpa_poles
 
-# Mean-field theory -> RPA: methods live in the MeanFieldToolkit extension.
+# Mean-field theory -> RPA: MeanFieldToolkit Hartree-Fock bands and their TDHF vertex.
 include("MeanFieldInterface.jl")
+using .MeanFieldInterface
 export rpa_model, rpa_vertex
 
 include("Plotting.jl")

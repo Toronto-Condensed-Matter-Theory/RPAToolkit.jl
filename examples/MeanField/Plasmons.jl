@@ -2,7 +2,7 @@
 Plasmons of a dilute two-dimensional metal with long-range Coulomb repulsion, from the RPA on top of
 its Hartree-Fock bands.
 
-    julia --project=examples/MeanField -t 8 examples/MeanField/Plasmons.jl
+    julia --project=. -t 8 examples/MeanField/Plasmons.jl
 
 The model is the square lattice at low filling (near the band bottom the band is parabolic, mass
 m = 1/(2t)) with e^2/(eps r) between electrons. MeanFieldToolkit decouples its two shortest-range

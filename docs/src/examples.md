@@ -61,8 +61,7 @@ See [The combined output](@ref) for every key.
 
 ## Hartree-Fock and the real-frequency RPA
 
-`examples/MeanField/` has its own environment (MeanFieldToolkit, FixedPointToolkit and
-TightBindingToolkit from sibling checkouts) and two scripts; see
+`examples/MeanField/` has two scripts, run in the package environment; see
 [Collective modes and mean-field theory](@ref) for what they compute.
 
 | script | model | output |
@@ -71,6 +70,6 @@ TightBindingToolkit from sibling checkouts) and two scripts; see
 | `Plasmons.jl` | dilute square-lattice metal with on-site `U` and ``e^2/\varepsilon r`` | the loss function, the plasmon against ``\sqrt{2\pi n e^2 q/m^*}``, and the particle-hole continuum |
 
 ```
-julia --project=examples/MeanField -t 8 examples/MeanField/Magnons.jl
-julia --project=examples/MeanField -t 8 examples/MeanField/Plasmons.jl
+julia --project=. -t 8 examples/MeanField/Magnons.jl
+julia --project=. -t 8 examples/MeanField/Plasmons.jl
 ```

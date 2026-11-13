@@ -50,9 +50,9 @@ because ``\chi`` is the per-spin bubble, so that the RPA reads ``1 + 2 v \chi_0 
 ``\Pi`` the full density bubble, and the 2D electron gas gives
 ``\omega_p^2 = 2\pi n e^2 q/(\varepsilon m)``.
 
-## Hartree-Fock bands: the MeanFieldToolkit extension
+## Hartree-Fock bands: the MeanFieldToolkit interface
 
-With `using MeanFieldToolkit`, a converged `TBMFTModel` hands its state to the RPA:
+A converged MeanFieldToolkit `TBMFTModel` hands its state to the RPA:
 
 ```julia
 using RPAToolkit, MeanFieldToolkit
