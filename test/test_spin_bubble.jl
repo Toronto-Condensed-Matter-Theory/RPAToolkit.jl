@@ -106,8 +106,8 @@ end
 
     @testset "the fixture's Ising model is models.jl's" begin
         f = load_spin_fixture("ising")
-        out = parse_unitcell(ising_model()[1])
-        mats = Dict(collect(Int, c) => out["hopping matrices"][i, :, :] for (i, c) in enumerate(eachcol(out["hopping offsets"])))
+        bm = band_model(ising_model()[1])
+        mats = Dict(bm.offsets .=> bm.matrices)
         zero2 = zeros(ComplexF64, 2, 2)
         @test all(get(mats, R, zero2) ≈ get(f.hoppings, R, zero2) for R in keys(mats) ∪ keys(f.hoppings))
     end

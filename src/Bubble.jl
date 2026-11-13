@@ -3,13 +3,13 @@ module Bubble
 #=
 The bare particle-hole bubble, in Julia.
 
-Everything here works on a `BandModel`: the hopping matrices of a TightBindingToolkit `UnitCell`
-exactly as `parse_unitcell` serializes them (spin the INNER index, every bond's Hermitian conjugate
-filled in), with the Bloch Hamiltonian in the periodic gauge,
+Everything here works on a `BandModel`: the hopping matrices t(R) of a TightBindingToolkit `UnitCell`
+(spin the INNER index, every bond's Hermitian conjugate filled in, on-site fields included), with
+the Bloch Hamiltonian in the periodic gauge,
 
     H(k) = sum_R t(R) e^{i k.R},      R a lattice vector (no basis offsets),
 
-which is TightBindingToolkit's convention (`BondDisplacements`) and the one `interaction()` builds
+which is TightBindingToolkit's `FillHoppingHamiltonian` exactly and the one `interaction()` builds
 V(q) in. No gauge phases are needed anywhere.
 
 The kernel is the Lindhard sum over band pairs (m at k, n at k - q), for operators O_p,
@@ -42,14 +42,13 @@ with w Im chi_aa(q, w) >= 0, one 4d x 4d matrix per (q, w), channel innermost.
 =#
 
 using LinearAlgebra, TightBindingToolkit, FFTW
-using ..RPAToolkit.parse_model: parse_unitcell
 using ..RPAToolkit.DLR: dlr_grid, matsubara_weights
 using ..RPAToolkit.SpinSectors: SPIN_SYMMETRIES
 using ..RPAToolkit.BilinearBasis: bilinear_closure, same_site_seed, lattice_point_group_2d,
                                   orbital_rep_from_bonds
 
-export BandModel, band_model, bloch_hamiltonian, spinless_model, band_spin_symmetry,
-       reciprocal_vectors, k_grid, k_path, fermi, band_energies, filling_at, mu_from_filling,
+export BandModel, band_model, bloch_hamiltonian, spinless_model, band_spin_symmetry, spin_symmetry,
+       reciprocal_vectors, k_grid, k_path, fermi, band_energies,
        channel_operators, closed_basis_for_model, static_bubble, static_bubble_dlr, stored_bubble,
        dynamic_bubble, lindhard_weight, band_eigen, particle_hole_edges, PAULI
 
@@ -81,27 +80,32 @@ norbitals(bm::BandModel) = size(bm.matrices[begin], 1)
     band_model(uc::UnitCell) -> BandModel
     band_model(primitives, hoppings::Dict; positions = nothing) -> BandModel
 
-From a TightBindingToolkit unit cell, through [`parse_unitcell`](@ref) plus the cell's on-site
-`fields` (so H(k) is TightBindingToolkit's own `Hamiltonian`), or from a `Dict(offset => matrix)`
-that already holds every bond's Hermitian conjugate.
+From a TightBindingToolkit unit cell, term by term as its `FillHoppingHamiltonian` builds H(k)
+(the bonds with their Hermitian conjugates, on-site bonds symmetrized, minus the on-site `fields`),
+or from a `Dict(offset => matrix)` that already holds every bond's Hermitian conjugate.
 """
 function band_model(uc::UnitCell)
-    p = parse_unitcell(uc)
-    offsets = [Int.(round.(c)) for c in eachcol(p["hopping offsets"])]
-    hoppings = Dict(offsets[i] => Matrix{ComplexF64}(p["hopping matrices"][i, :, :]) for i in eachindex(offsets))
-    #####* the on-site fields (Zeeman fields, chemical potential) TightBindingToolkit's Hamiltonian
-    #####* subtracts, -sum(fields[site] .* OnSiteMats), which parse_unitcell does not serialize
-    n = uc.localDim * length(uc.basis)
-    if any(f -> any(!iszero, f), uc.fields)
-        onsite = get!(hoppings, [0, 0]) do
-            zeros(ComplexF64, n, n)
-        end
-        for site in eachindex(uc.basis)
-            r = uc.localDim * (site - 1) .+ (1:uc.localDim)
-            onsite[r, r] .-= sum(uc.fields[site] .* uc.OnSiteMats)
+    length(uc.primitives) == 2 || error("band_model: needs a 2D unit cell, got $(length(uc.primitives)) primitives.")
+    d = uc.localDim
+    n = d * length(uc.basis)
+    hoppings = Dict{Vector{Int}, Matrix{ComplexF64}}()
+    t(offset) = get!(() -> zeros(ComplexF64, n, n), hoppings, Int.(offset))
+    orbitals(site) = d * (site - 1) .+ (1:d)
+    for bond in uc.bonds
+        i, j = orbitals(bond.base), orbitals(bond.target)
+        if bond.base == bond.target && iszero(bond.offset)
+            t([0, 0])[i, i] .+= (bond.mat .+ bond.mat') ./ 2
+        else
+            t(bond.offset)[i, j] .+= bond.mat
+            t(-bond.offset)[j, i] .+= bond.mat'
         end
     end
-    positions = [Float64.(c[1:2]) for c in eachcol(p["orbital_positions"])]
+    for site in eachindex(uc.basis)
+        field = sum(uc.fields[site] .* uc.OnSiteMats)
+        any(!iszero, field) && (t([0, 0])[orbitals(site), orbitals(site)] .-= field)
+    end
+    isempty(hoppings) && t([0, 0])
+    positions = [Float64.(uc.basis[site][1:2]) for site in eachindex(uc.basis) for _ in 1:d]
     return band_model([uc.primitives[1], uc.primitives[2]], hoppings; positions = positions)
 end
 
@@ -143,7 +147,7 @@ end
 """
     band_spin_symmetry(bm) -> String
 
-`"SU2"`, `"U1z"` or `"none"` by the same exact tests as [`spin_symmetry`](@ref RPAToolkit.SpinSectors.spin_symmetry): no spin-flip
+`"SU2"`, `"U1z"` or `"none"`: no spin-flip
 entries and identical spin blocks (with spin partners at the same position) is SU2, no spin-flip
 entries U1z.
 """
@@ -154,6 +158,17 @@ function band_spin_symmetry(bm::BandModel)::String
     any(M -> any(!iszero, M[up, dn]) || any(!iszero, M[dn, up]), bm.matrices) && return "none"
     same = all(M -> M[up, up] == M[dn, dn], bm.matrices) && bm.positions[up] == bm.positions[dn]
     return same ? "SU2" : "U1z"
+end
+
+"""
+    spin_symmetry(uc::UnitCell) -> String
+
+[`band_spin_symmetry`](@ref) of the unit cell's [`band_model`](@ref), on-site fields included. Needs
+`localDim = 2`.
+"""
+function spin_symmetry(uc::UnitCell)::String
+    uc.localDim == 2 || error("spin_symmetry: localDim = $(uc.localDim); the spin index needs 2.")
+    return band_spin_symmetry(band_model(uc))
 end
 
 #####* ---------------------------------------------------------------------------------------
@@ -240,31 +255,6 @@ end
 The eigenvalues of H(k), one column per momentum.
 """
 band_energies(bm::BandModel, ks) = reduce(hcat, [eigvals(bloch_hamiltonian(bm, k)) for k in ks])
-
-"""
-    filling_at(energies, beta, mu) -> Float64
-
-The mean occupation of the states in `energies` (per spin-orbital, between 0 and 1).
-"""
-filling_at(energies::AbstractArray, beta::Real, mu::Real) = sum(E -> fermi(E, beta, mu), energies) / length(energies)
-
-"""
-    mu_from_filling(energies, beta, target; tol = 1e-12) -> Float64
-
-The chemical potential at which [`filling_at`](@ref) is `target`, by bisection.
-"""
-function mu_from_filling(energies::AbstractArray, beta::Real, target::Real; tol::Real = 1e-12, max_iter::Int = 400)
-    0 <= target <= 1 || error("mu_from_filling: the target filling $target is not in [0, 1].")
-    lo, hi = minimum(energies) - 1.0, maximum(energies) + 1.0
-    while filling_at(energies, beta, lo) > target; lo -= 1.0; end
-    while filling_at(energies, beta, hi) < target; hi += 1.0; end
-    for _ in 1:max_iter
-        mid = 0.5 * (lo + hi)
-        filling_at(energies, beta, mid) > target ? (hi = mid) : (lo = mid)
-        hi - lo < tol && break
-    end
-    return 0.5 * (lo + hi)
-end
 
 #####* ---------------------------------------------------------------------------------------
 #####* operators

@@ -1,9 +1,8 @@
 module SpinSectors
 
 using LinearAlgebra, TightBindingToolkit
-using ..RPAToolkit.parse_model: parse_unitcell
 
-export SPIN_SYMMETRIES, VERTEX_SLOTS, channel_pairs, pair_label, spin_symmetry,
+export SPIN_SYMMETRIES, VERTEX_SLOTS, channel_pairs, pair_label,
        stored_spin_symmetry, spin_sectors, off_sector_norm
 
 """
@@ -52,21 +51,6 @@ channel_pairs(symmetry::AbstractString) = CHANNEL_PAIRS[symmetry]
 The key of the `(a, b)` channel pair in a bare-stage `.npz`: `"chi_NN"`, `"chi_NZ"`, `"chi_XY"`, ...
 """
 pair_label(a::Integer, b::Integer) = "chi_" * CHANNEL_NAMES[a + 1] * CHANNEL_NAMES[b + 1]
-
-"""
-    spin_symmetry(uc::UnitCell) -> String
-
-The spin symmetry of the hopping model, by the same exact tests the bare stage applies to the
-same serialized hopping matrices ([`parse_unitcell`](@ref)): `"SU2"` when every spin block is the
-identity times one number, `"U1z"` when no hopping flips spin, else `"none"`.
-"""
-function spin_symmetry(uc::UnitCell)::String
-    uc.localDim == 2 || error("spin_symmetry: localDim = $(uc.localDim); the spin index needs 2.")
-    H = parse_unitcell(uc)["hopping matrices"]
-    up, dn = 1:2:size(H, 2), 2:2:size(H, 2)
-    (any(!iszero, H[:, up, dn]) || any(!iszero, H[:, dn, up])) && return "none"
-    return H[:, up, up] == H[:, dn, dn] ? "SU2" : "U1z"
-end
 
 """
     stored_spin_symmetry(data; model_symmetry) -> String

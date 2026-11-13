@@ -1,13 +1,9 @@
 module RPAToolkit
 
-include("./Bare/parse_model.jl")
-using .parse_model
-export parse_unitcell
-
 # The spin symmetry of a model and the channel sectors it makes chi and V block diagonal in.
 include("SpinSectors.jl")
 using .SpinSectors
-export SPIN_SYMMETRIES, VERTEX_SLOTS, channel_pairs, pair_label, spin_symmetry,
+export SPIN_SYMMETRIES, VERTEX_SLOTS, channel_pairs, pair_label,
        stored_spin_symmetry, spin_sectors, off_sector_norm
 
 include("Preprocess.jl")
@@ -45,8 +41,8 @@ export DLRGrid, dlr_grid, matsubara_weights
 # The bare bubble, static and real-frequency, in Julia.
 include("Bubble.jl")
 using .Bubble
-export BandModel, band_model, bloch_hamiltonian, spinless_model, band_spin_symmetry,
-       reciprocal_vectors, k_grid, k_path, fermi, band_energies, filling_at, mu_from_filling,
+export BandModel, band_model, bloch_hamiltonian, spinless_model, band_spin_symmetry, spin_symmetry,
+       reciprocal_vectors, k_grid, k_path, fermi, band_energies,
        channel_operators, closed_basis_for_model, static_bubble, static_bubble_dlr, stored_bubble,
        dynamic_bubble, lindhard_weight, band_eigen, particle_hole_edges
 

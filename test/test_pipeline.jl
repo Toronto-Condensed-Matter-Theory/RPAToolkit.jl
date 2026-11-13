@@ -1,4 +1,4 @@
-##### load_rpa_input, parse_unitcell and run_rpa end to end, on a synthetic bubble
+##### load_rpa_input, band_model and run_rpa end to end, on a synthetic bubble
 
 @testset "pipeline" begin
 
@@ -24,18 +24,33 @@
         end
     end
 
-    @testset "parse_unitcell" begin
+    @testset "band_model of a UnitCell" begin
         uc, _   =   square_model()
-        out     =   parse_unitcell(uc)
-        @test out["units"] == [1.0 0.0; 0.0 1.0; 0.0 0.0]
-        offsets =   [Tuple(c) for c in eachcol(out["hopping offsets"])]
-        @test Set(offsets) == Set([(1, 0), (-1, 0), (0, 1), (0, -1)])
+        bm      =   band_model(uc)
+        @test bm.primitives == [[1.0, 0.0], [0.0, 1.0]]
+        @test Set(bm.offsets) == Set([[1, 0], [-1, 0], [0, 1], [0, -1]])
         ##### every hopping comes with its Hermitian conjugate at the opposite offset
-        mats    =   Dict(o => out["hopping matrices"][i, :, :] for (i, o) in enumerate(offsets))
-        for o in offsets
-            @test mats[.-o] == collect(mats[o]')
+        mats    =   Dict(bm.offsets .=> bm.matrices)
+        for o in bm.offsets
+            @test mats[-o] == collect(mats[o]')
         end
-        @test mats[(1, 0)] ≈ -Matrix(I, 2, 2)
+        @test mats[[1, 0]] ≈ -Matrix(I, 2, 2)
+
+        ##### H(k) is TightBindingToolkit's own, on-site fields included
+        honeycomb = UnitCell([[1.0, 0.0], [0.5, sqrt(3) / 2]], 2)
+        AddBasisSite!(honeycomb, [0.0, 0.0])
+        AddBasisSite!(honeycomb, [0.5, sqrt(3) / 6])
+        S = SpinMats(1 // 2)
+        t1 = Param(-1.0, 2); AddIsotropicBonds!(t1, honeycomb, 1 / sqrt(3), S[4], "t1")
+        so = Param(0.2, 2);  AddIsotropicBonds!(so, honeycomb, 1.0, im .* S[3], "spin-orbit")
+        CreateUnitCell!(honeycomb, [t1, so])
+        @test spin_symmetry(honeycomb) == "U1z"
+        ModifyFields!(honeycomb, [[0.1, 0.0, 0.3, 0.2], [0.0, 0.1, -0.3, -0.2]])
+        @test spin_symmetry(honeycomb) == "none"
+        bm      =   band_model(honeycomb)
+        for k in ([0.0, 0.0], [1.3, -0.4], [2pi / 3, 2pi / sqrt(3)])
+            @test Matrix(bloch_hamiltonian(bm, k)) ≈ FillHoppingHamiltonian(honeycomb, k) atol = 1e-13
+        end
     end
 
     ##### chi(q) = c0 + c1 cos qx cos qy as the stored (half, per-spin) bubble; the on-site Hubbard

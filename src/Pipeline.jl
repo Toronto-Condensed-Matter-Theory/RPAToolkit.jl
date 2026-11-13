@@ -3,11 +3,11 @@ module Pipeline
 using JLD2, NPZ, YAML, LaTeXStrings, LinearAlgebra, Plots, TightBindingToolkit
 using ..RPAToolkit.InputParser: load_rpa_input
 using ..RPAToolkit.SpinSectors: SPIN_SYMMETRIES, channel_pairs, pair_label
-using ..RPAToolkit.Bubble: band_model, band_spin_symmetry, spinless_model, bloch_hamiltonian, channel_operators,
-                           closed_basis_for_model, stored_bubble, k_grid, k_path, band_energies, filling_at,
-                           mu_from_filling, reciprocal_vectors, band_eigen
+using ..RPAToolkit.Bubble: band_model, band_spin_symmetry, spin_symmetry, spinless_model, channel_operators,
+                           closed_basis_for_model, stored_bubble, k_grid, k_path, band_energies,
+                           reciprocal_vectors, band_eigen
 using ..RPAToolkit.Preprocess: dress_primitives, combine_chis, CHI_ORIENTATION
-using ..RPAToolkit.SpinSectors: spin_symmetry, stored_spin_symmetry, spin_sectors, VERTEX_SLOTS
+using ..RPAToolkit.SpinSectors: stored_spin_symmetry, spin_sectors, VERTEX_SLOTS
 using ..RPAToolkit.Interactions: interaction, INTERACTION_CONVENTION
 using ..RPAToolkit.Response: find_instability
 using ..RPAToolkit.BilinearVertex: basis_rotation, rotate_channel_blocks
@@ -102,20 +102,36 @@ function scan_axis(cfg, name::AbstractString; span = nothing)
 end
 
 """
-    resolve_scan_values(params, beta, energies) -> (mus, fillings, source)
+    free_model(unitcell, k_size, beta) -> TightBindingToolkit.Model
 
-The chemical potentials a run scans, the fillings they give on `energies`, and which of the two the
-config specified (`"mus"` or `"fillings"`).
+The free model on TightBindingToolkit's `k_size × k_size` Brillouin-zone grid (the momenta of
+[`k_grid`](@ref RPAToolkit.Bubble.k_grid), in another order), diagonalized, at `T = 1/beta`. Its bands
+fix the scan's fillings and chemical potentials.
+"""
+function free_model(unitcell::UnitCell, k_size::Integer, beta::Real)
+    bz = BZ(k_size)
+    FillBZ!(bz, unitcell)
+    H = Hamiltonian(unitcell, bz)
+    DiagonalizeHamiltonian!(H; verbose = false)
+    return Model(unitcell, bz, H; T = 1 / beta)
+end
+
+"""
+    resolve_scan_values(params, model::Model) -> (mus, fillings, source)
+
+The chemical potentials a run scans, the fillings they give on the bands of `model`
+([`free_model`](@ref)), and which of the two the config specified (`"mus"` or `"fillings"`).
 
 MU IS THE SCAN VARIABLE: the bubble is computed at a chemical potential and the filling is a label
 counted from it. A config may ask for fillings instead; the mus are then found ONCE by inverting
-filling(mu), and from then on they are what the run is. The resolved values are written back into
-the runtime YAML with `scan.source`, and a file that carries `scan.source` is taken verbatim (only
-its fillings are recounted), so reading a resolved file again is a no-op.
+filling(mu) (TightBindingToolkit's `GetMu!`), and from then on they are what the run is. The
+resolved values are written back into the runtime YAML with `scan.source`, and a file that carries
+`scan.source` is taken verbatim (only its fillings are recounted), so reading a resolved file again
+is a no-op.
 """
-function resolve_scan_values(params, beta::Real, energies::AbstractArray)
-    span = (minimum(energies), maximum(energies))
-    fillings_of(mus) = [filling_at(energies, beta, mu) for mu in mus]
+function resolve_scan_values(params, model::Model)
+    span = model.Ham.bandwidth
+    fillings_of(mus) = [FindFilling(Float64(mu), model.Ham.bands, model.T, model.stat) for mu in mus]
 
     recorded = get(get(params, "scan", Dict()), "source", nothing)
     if recorded !== nothing
@@ -131,7 +147,13 @@ function resolve_scan_values(params, beta::Real, energies::AbstractArray)
         return mus, fillings_of(mus), "mus"
     end
     fillings = scan_axis(params["fillings"], "fillings")
-    return [mu_from_filling(energies, beta, f) for f in fillings], fillings, "fillings"
+    all(f -> 0 <= f <= 1, fillings) || error("fillings must lie in [0, 1], got $fillings.")
+    mus = map(fillings) do f
+        model.filling = f
+        GetMu!(model; mu_tol = 1e-12, filling_tol = 1e-14)
+        model.mu
+    end
+    return mus, fillings, "fillings"
 end
 
 """
@@ -198,15 +220,15 @@ function run_bare(config::AbstractString)
 
     ks = k_grid(bm.primitives, k_size)
     path, path_plot, path_ticks = k_path(bm.primitives, runtime_input["k_points"])
-    energies = band_energies(bm, ks)
-    bandwidth = [minimum(energies), maximum(energies)]
+    free = free_model(unitcell, k_size, beta)
+    bandwidth = collect(free.Ham.bandwidth)
 
     say("model spin symmetry: $model_symmetry; bare bubble: $method" *
         (method == :dlr ? " (w_max = $w_max, eps = $dlr_err)" : "") * ", " *
         (factorized ? "spin-factorized (spinless bubble x 1/2)" : "spinful, $(length(pairs)) channel pairs") *
         ", basis dimension $d, $(length(ks)) + $(length(path)) momenta on $(Threads.nthreads()) threads")
 
-    mus, fillings, source = resolve_scan_values(runtime_input, beta, energies)
+    mus, fillings, source = resolve_scan_values(runtime_input, free)
     runtime_input["scan"] = Dict("source" => source,
                                  "requested" => get(get(runtime_input, "scan", Dict()), "requested",
                                                     get(runtime_input, source, Dict())))
