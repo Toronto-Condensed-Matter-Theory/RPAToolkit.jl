@@ -9,3 +9,4 @@ __pycache__/
 *.npz
 *.h5
 examples/*/data/
+examples/*/Manifest.toml

@@ -21,16 +21,11 @@ Everything a run writes goes to `<Lattice>/data/` (git-ignored).
 
 ## Running
 
-The bare stage needs TRIQS and triqs_tprf, plus `numpy` and `pyyaml`, in one Python environment. Make that
-environment's `python3` the one on your `PATH`, or say how to launch it:
-```
-export TRIQS_ENVIRONMENT="python3"              # or "mpirun -n 8 python3"
-```
-Then, from the repository root:
+From the repository root:
 ```
 julia --project=. -t 4 examples/Square/Square.jl
 ```
-Each example takes under a minute on a laptop at `k_size: 48` (run serially; `mpirun` speeds up larger grids). Then open `examples/Square/Square.ipynb`
+Each example takes seconds on a laptop at `k_size: 48`; set `bubble: dlr` in the config for much larger grids. Then open `examples/Square/Square.ipynb`
 with the Julia kernel (IJulia), or make the two quick plots from the shell:
 ```
 julia --project=. examples/plot_bands.jl examples/Square/Square.yml
@@ -47,3 +42,25 @@ The tail is pure charge. It screens the charge channel and does nothing to the s
 the spin-driven critical `U`; only their charge responses differ. Make `range` larger or `onsite` smaller and the
 charge channel can go attractive at large `q`, which shows up as a charge-ordering instability with a lower critical
 strength than the Hubbard case.
+
+## Hartree-Fock + real-frequency RPA (`MeanField/`)
+
+[MeanFieldToolkit.jl](https://github.com/Toronto-Condensed-Matter-Theory/MeanFieldToolkit.jl) solves the
+Hartree-Fock problem (Anderson mixing); `rpa_model(mft)` and `rpa_vertex(mft)` (a package extension, loaded by
+`using MeanFieldToolkit`) hand its bands and the TDHF vertex of the same interaction to the RPA. The folder has its
+own environment, which takes MeanFieldToolkit, FixedPointToolkit and TightBindingToolkit from sibling checkouts
+(`../MeanFieldToolkit.jl` and so on, see `MeanField/Project.toml`):
+
+- `Magnons.jl`: the Néel state of the square-lattice Hubbard model at `U = 4, 8, 12`. Checks the Goldstone mode
+  (the largest transverse eigenvalue of `χ₀V` at the ordering vector is exactly 1) and plots the transverse spin
+  spectral function along Γ → X → M → Γ against linear spin-wave theory, `ω = 2J√(1 − γ_q²)`, `J = 4t²/U`.
+- `Plasmons.jl`: a dilute metal (`n = 0.1`) with on-site `U` and `e²/εr`. Hartree-Fock of `U` and the
+  nearest-neighbour part (the Fock term widens the band), then the RPA with the full Ewald-summed `1/r` tail:
+  the loss function, the plasmon against `√(2π n e² q / m*)`, and the particle-hole continuum.
+
+```
+julia --project=examples/MeanField -t 8 examples/MeanField/Magnons.jl
+julia --project=examples/MeanField -t 8 examples/MeanField/Plasmons.jl
+```
+Output goes to `MeanField/data/`. The extension's tests run in the same environment:
+`julia --project=examples/MeanField test/test_meanfield_ext.jl`.

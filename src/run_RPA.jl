@@ -16,7 +16,7 @@ function parse_commandline()
             arg_type = String
             required = true
         "--run_bare"
-            help = "run the bare susceptibility calculation in TRIQS first."
+            help = "run the bare susceptibility calculation first."
             arg_type = Bool
             default = false
         "--plot_RPA"

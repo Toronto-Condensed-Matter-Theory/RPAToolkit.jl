@@ -1,27 +1,38 @@
 name = "RPAToolkit"
 uuid = "b283929e-e2c3-445a-a93e-21ce7c83cc79"
-version = "1.0.0"
+version = "1.1.0"
 authors = ["Anjishnu Bose", "Andrew Hardy"]
 
 [deps]
 ArgParse = "c7e460c6-2fb9-53a9-8c5b-16f535851c63"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LaTeXStrings = "b964fa9f-0449-5b57-a5c2-d3ea65f4040f"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 NPZ = "15e1cf62-19b3-5cfa-8e77-841668bca605"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SpecialFunctions = "276daf66-3868-5448-9aa4-cd146d93841b"
 TightBindingToolkit = "2233325a-6eb3-486f-aff0-670e0939fa7e"
 YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
+
+[weakdeps]
+MeanFieldToolkit = "b00fcea2-f4b1-4480-b444-a0ed31c44801"
+
+[extensions]
+RPAToolkitMeanFieldToolkitExt = "MeanFieldToolkit"
 
 [compat]
 ArgParse = "1"
 DelimitedFiles = "1"
+FFTW = "1"
 JLD2 = "0.4, 0.5, 0.6"
 LaTeXStrings = "1"
 LinearAlgebra = "1"
+MeanFieldToolkit = "2.3"
 NPZ = "0.4"
 Plots = "1"
 Random = "1"
+SpecialFunctions = "2"
 Test = "1"
 TightBindingToolkit = "3.2"
 YAML = "0.4"

@@ -10,8 +10,7 @@ on-site Hubbard ``U`` and a bare ``1/r`` Coulomb tail:
 | `Honeycomb` | honeycomb (graphene) | 2 | Γ → M → K → Γ |
 
 Each has a config, a script that builds the model and the interactions and runs both stages, and a
-Julia notebook that plots the results. Run one from the repository root, with TRIQS available (see
-[Installation](@ref)):
+Julia notebook that plots the results. Run one from the repository root:
 ```
 julia --project=. -t 4 examples/Square/Square.jl
 ```
@@ -59,3 +58,19 @@ for (key, entry) in output
 end
 ```
 See [The combined output](@ref) for every key.
+
+## Hartree-Fock and the real-frequency RPA
+
+`examples/MeanField/` has its own environment (MeanFieldToolkit, FixedPointToolkit and
+TightBindingToolkit from sibling checkouts) and two scripts; see
+[Collective modes and mean-field theory](@ref) for what they compute.
+
+| script | model | output |
+|:-------|:------|:-------|
+| `Magnons.jl` | square-lattice Hubbard, Néel order on the √2×√2 cell, `U = 4, 8, 12` | the transverse spin spectral function along Γ → X → M → Γ, with the Goldstone check and linear spin-wave theory overlaid |
+| `Plasmons.jl` | dilute square-lattice metal with on-site `U` and ``e^2/\varepsilon r`` | the loss function, the plasmon against ``\sqrt{2\pi n e^2 q/m^*}``, and the particle-hole continuum |
+
+```
+julia --project=examples/MeanField -t 8 examples/MeanField/Magnons.jl
+julia --project=examples/MeanField -t 8 examples/MeanField/Plasmons.jl
+```

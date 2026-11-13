@@ -11,11 +11,15 @@ channel; with it, the channels mix (see [Spin-orbit coupling and spin sectors](@
 
 ## The bare susceptibility
 
-[`combine_chis`](@ref) assembles the stored bubbles into
-``\chi_{ij}(q) = \langle O_i(-q) O_j(q) \rangle``, with
-``O_i(q) = \sum_r e^{-iq\cdot r} c^\dagger_r M_i c_r`` in TightBindingToolkit's
-``H(k) = \sum_R e^{ik\cdot R} t(R)`` (the same ``e^{-iq\cdot r}`` as the interaction's ``V(q)``).
-That is a plain transpose, of the whole matrix, of what TRIQS's contraction gives, normalized as
+[`combine_chis`](@ref) assembles the stored bubbles into ``\chi_{ij}(q)``, the response of the
+``e^{iq\cdot R}`` component of ``O_i`` to a field ``e^{iq\cdot R}`` on ``O_j`` (``R`` the lattice
+vectors, in TightBindingToolkit's ``H(k) = \sum_R e^{ik\cdot R} t(R)``). The interaction is built in
+the same Bloch convention, ``V_{ij}(q) = \sum M e^{+iq\cdot\delta}`` per bond
+([`INTERACTION_CONVENTION`](@ref)), which is what makes ``(1 - \chi V)^{-1}\chi`` the RPA. Both are
+checked against an exact real-space Hartree RPA on a periodic cluster.
+That is a plain transpose, of the whole matrix, of what the bare stage stores (TPRF's contraction, which the
+Julia bubble reproduces: [`stored_bubble`](@ref) is the transpose of the Lindhard sum with the operators
+transposed), normalized as
 the per-spin bubble ``\chi_0`` of Graser et al., NJP **11**, 025016 (2009) (twice what is stored). [`CHI_ORIENTATION`](@ref) names this convention, and `run_rpa` records it
 in its output. The static bubble is positive semidefinite.
 
@@ -57,21 +61,27 @@ The two building blocks:
 | on-site Hubbard ``U n_\uparrow n_\downarrow`` | ``\mathrm{diag}(-1, +1, +1, +1)``: ``U^{(s)} = U^{(c)} = U`` | [`HUBBARD_CHANNELS`](@ref) |
 | density-density ``V n_a n_b`` | ``\mathrm{diag}(-1, 0, 0, 0)``: charge only | [`DENSITY_CHANNELS`](@ref) |
 
-With `DENSITY_CHANNELS`, an on-site ``U`` plus a tail ``V(q) = \sum_\delta e^{-iq\cdot\delta} V_\delta``
+With `DENSITY_CHANNELS`, an on-site ``U`` plus a tail ``V(q) = \sum_\delta e^{+iq\cdot\delta} V_\delta``
 gives ``U^{(c)}(q) = U + V(q)``. Graser's density-density vertex is ``2V``; the multi-orbital
 ZrNCl builder in the TMD project registers `diag(-2, 0, 0, 0)` for that reason. The two differ
 only in what is called ``V``.
 
 Interaction files record the layout as `"vertex_slots" => VERTEX_SLOTS`, and `run_rpa` refuses a
-file without it. Until 2026-11-01 slot N held ``U^{(s)}`` and slot Z held ``-U^{(c)}``, with X and
+file without it.
+
+Until 2026-11-12 [`interaction`](@ref) built ``V(q)`` with ``e^{-iq\cdot\delta}``, which is ``V(-q) = V(q)^T``.
+That is the same thing for on-site interactions and on lattices with one site per cell, but on a
+multi-site cell a non-local interaction entered the RPA transposed; the honeycomb example's ``1/r``
+charge response was off by 30-40% (its critical strengths, set by the local spin vertex, were not).
+`run_rpa` now records `"interaction_convention" => INTERACTION_CONVENTION` in its output. Until 2026-11-01 slot N held ``U^{(s)}`` and slot Z held ``-U^{(c)}``, with X and
 Y empty: the same physics without spin-orbit coupling (critical strengths are identical, and the
 screened interaction's N and Z blocks swap), but not with it.
 
 ## Spin-orbit coupling and spin sectors
 
 How many entries of the ``4 \times 4`` channel matrix ``\chi^{\mu\nu}`` can be nonzero is set by
-the spin rotations the hopping model commutes with. [`spin_symmetry`](@ref) (Julia) and the bare
-stage (Python) apply the same exact tests to the serialized hoppings:
+the spin rotations the hopping model commutes with. [`spin_symmetry`](@ref) and the bare stage
+([`band_spin_symmetry`](@ref)) apply the same exact tests to the serialized hoppings:
 
 | symmetry | the model | bubble | channel pairs | sectors |
 |:---------|:----------|:-------|:--------------|:--------|

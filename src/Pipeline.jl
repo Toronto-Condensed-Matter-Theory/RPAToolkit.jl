@@ -2,10 +2,13 @@ module Pipeline
 
 using JLD2, NPZ, YAML, LaTeXStrings, LinearAlgebra, Plots, TightBindingToolkit
 using ..RPAToolkit.InputParser: load_rpa_input
-using ..RPAToolkit.parse_model: parse_unitcell
+using ..RPAToolkit.SpinSectors: SPIN_SYMMETRIES, channel_pairs, pair_label
+using ..RPAToolkit.Bubble: band_model, band_spin_symmetry, spinless_model, bloch_hamiltonian, channel_operators,
+                           closed_basis_for_model, stored_bubble, k_grid, k_path, band_energies, filling_at,
+                           mu_from_filling, reciprocal_vectors, band_eigen
 using ..RPAToolkit.Preprocess: dress_primitives, combine_chis, CHI_ORIENTATION
 using ..RPAToolkit.SpinSectors: spin_symmetry, stored_spin_symmetry, spin_sectors, VERTEX_SLOTS
-using ..RPAToolkit.Interactions: interaction
+using ..RPAToolkit.Interactions: interaction, INTERACTION_CONVENTION
 using ..RPAToolkit.Response: find_instability
 using ..RPAToolkit.BilinearVertex: basis_rotation, rotate_channel_blocks
 using ..RPAToolkit.Plotting: plot_chi
@@ -51,8 +54,7 @@ function cartesian_to_reduced(point, reciprocal_basis)
     return [abs(value) < 1e-12 ? 0.0 : value for value in reduced]
 end
 
-#####* k_points given as TightBindingToolkit HighSymPoints labels -> reduced coordinates,
-#####* which is the only form the TRIQS stage accepts.
+#####* k_points given as TightBindingToolkit HighSymPoints labels -> reduced coordinates
 function resolve_k_points!(input, unitcell)
     if !haskey(input, "k_points")
         return
@@ -88,51 +90,188 @@ function runtime_input_path(input)
     return joinpath(output_dir, "$(prefix)_runtime_input.yml")
 end
 
+#####* one scan axis, from `values`, or `min`/`max`/`n`, or a bare `n` spanning `span`
+function scan_axis(cfg, name::AbstractString; span = nothing)
+    haskey(cfg, "values") && return Float64.(collect(cfg["values"]))
+    all(k -> haskey(cfg, k), ("min", "max", "n")) &&
+        return collect(range(Float64(cfg["min"]), Float64(cfg["max"]), length = Int(cfg["n"])))
+    haskey(cfg, "n") && span !== nothing &&
+        return collect(range(Float64(span[1]), Float64(span[2]), length = Int(cfg["n"])))
+    error("$name must define `values`, or `min`+`max`+`n`" * (span === nothing ? "" : ", or a bare `n` spanning the bandwidth") *
+          "; got keys $(sort(collect(keys(cfg)))).")
+end
+
+"""
+    resolve_scan_values(params, beta, energies) -> (mus, fillings, source)
+
+The chemical potentials a run scans, the fillings they give on `energies`, and which of the two the
+config specified (`"mus"` or `"fillings"`).
+
+MU IS THE SCAN VARIABLE: the bubble is computed at a chemical potential and the filling is a label
+counted from it. A config may ask for fillings instead; the mus are then found ONCE by inverting
+filling(mu), and from then on they are what the run is. The resolved values are written back into
+the runtime YAML with `scan.source`, and a file that carries `scan.source` is taken verbatim (only
+its fillings are recounted), so reading a resolved file again is a no-op.
+"""
+function resolve_scan_values(params, beta::Real, energies::AbstractArray)
+    span = (minimum(energies), maximum(energies))
+    fillings_of(mus) = [filling_at(energies, beta, mu) for mu in mus]
+
+    recorded = get(get(params, "scan", Dict()), "source", nothing)
+    if recorded !== nothing
+        mus = Float64.(collect(params["mus"]["values"]))
+        return mus, fillings_of(mus), String(recorded)
+    end
+    has_mus, has_fillings = haskey(params, "mus"), haskey(params, "fillings")
+    has_mus && has_fillings &&
+        error("The config sets BOTH `mus` and `fillings`, two parameterisations of the same scan. Delete one.")
+    has_mus || has_fillings || error("The config must define either `mus` or `fillings`.")
+    if has_mus
+        mus = scan_axis(params["mus"], "mus"; span = span)
+        return mus, fillings_of(mus), "mus"
+    end
+    fillings = scan_axis(params["fillings"], "fillings")
+    return [mu_from_filling(energies, beta, f) for f in fillings], fillings, "fillings"
+end
+
 """
     run_bare(config) -> String
 
-The bare-susceptibility stage, in TRIQS.
+The bare-susceptibility stage.
 
-Reads the model's `"unit cell"` from `unitcell.julia`, writes it in TRIQS form to `unitcell.triqs`,
-writes the resolved config (k-points as coordinates, absolute paths) to
-`<output>_runtime_input.yml`, and runs `src/Bare/run_bare.py` on it. That writes one
-`<output>_beta=<beta>_mu=<mu>.npz` per chemical potential and records the resolved `mus` and
-`fillings` back into the runtime file. Every mu is recomputed and overwritten.
+Reads the model's `"unit cell"` from `unitcell.julia` and, for every chemical potential of the scan
+(`mus`, or `fillings` inverted once on the bands), computes the static bubble on the
+`k_size × k_size` grid and along the closed path through `k_points`. Writes one
+`<output>_beta=<beta>_mu=<mu>.npz` per mu, in the layout and convention the TRIQS stage wrote
+([`stored_bubble`](@ref)), and the resolved config (k-points as coordinates, the resolved `mus`
+and `fillings` under `scan.source`) to `<output>_runtime_input.yml`, which it returns.
 
-The Python is launched with the config's `triqs_environment` if set, else the `TRIQS_ENVIRONMENT`
-environment variable, else `python3` -- e.g. `mpirun -n 8 python3`. Returns the runtime file.
+Config keys: `bubble` (`lindhard`, the exact sum and the default, or `dlr`, the imaginary-time FFT
+route that scales as N_k log N_k, with `w_max` its spectral cutoff and `dlr_err` its accuracy),
+`bubble_spin` (`auto`, or `full` to skip the SU(2) factorization), `bilinear_basis`
+(`per_orbital` or `closed`, with `bilinear_seed`) and `directions`. Threaded over momenta.
 """
 function run_bare(config::AbstractString)
     input = load_rpa_input(config)
     runtime_input = deepcopy(input)
 
-    model = load(input["unitcell"]["julia"])
-    unitcell = model["unit cell"]
-
+    unitcell = load(input["unitcell"]["julia"])["unit cell"]
     resolve_k_points!(runtime_input, unitcell)
+    haskey(runtime_input, "k_points") || error("The config must give `k_points` for the path.")
 
-    triqs_input = input["unitcell"]["triqs"]
-    mkpath(dirname(triqs_input))
-    parse_unitcell(unitcell, triqs_input)
+    bm = band_model(unitcell)
+    k_size = Int(input["k_size"])
+    beta = Float64(input["beta"])
+    directions = sort(Int.(input["directions"]))
+    n_orb = length(unitcell.basis)
 
+    #####* the operator basis
+    basis_mode = lowercase(String(get(input, "bilinear_basis", "per_orbital")))
+    basis_mode in ("per_orbital", "closed") ||
+        error("bilinear_basis must be 'per_orbital' or 'closed', got $(repr(basis_mode)).")
+
+    #####* which channel pairs, and whether the spinless bubble serves for all of them
+    bubble_spin = lowercase(String(get(input, "bubble_spin", "auto")))
+    bubble_spin in ("auto", "full") || error("bubble_spin must be 'auto' or 'full', got $(repr(bubble_spin)).")
+    model_symmetry = band_spin_symmetry(bm)
+    symmetry = bubble_spin == "auto" ? model_symmetry : "none"
+    factorized = symmetry == "SU2"
+    symmetry == "SU2" || directions == [0, 1, 2, 3] ||
+        error("directions = $directions: a $symmetry bubble mixes the charge and spin channels, so it needs all four, [0, 1, 2, 3].")
+    basis = nothing
+    if basis_mode == "closed"
+        model_symmetry == "SU2" ||
+            error("bilinear_basis: closed needs a model without spin-orbit coupling, and this one is $model_symmetry.")
+        basis = closed_basis_for_model(bm; seed = String(get(input, "bilinear_seed", "kanamori")), verbose = true)
+    end
+    d = basis === nothing ? n_orb : length(basis)
+    pairs = [(a, b) for (a, b) in channel_pairs(symmetry) if a in directions && b in directions]
+
+    method = Symbol(lowercase(String(get(input, "bubble", "lindhard"))))
+    method in (:lindhard, :dlr) || error("bubble must be 'lindhard' or 'dlr', got $(repr(method)).")
+    w_max = Float64(get(input, "w_max", 20.0))
+    dlr_err = Float64(get(input, "dlr_err", 1e-12))
+
+    model = factorized ? spinless_model(bm) : bm
+    ops = factorized ? channel_operators(n_orb; basis = basis, spinful = false) :
+                       channel_operators(n_orb; basis = basis, directions = 0:3)
+    factor = factorized ? 0.5 : 1.0       # Tr[(sigma^a / 2)^2] on the spinless bubble
+
+    ks = k_grid(bm.primitives, k_size)
+    path, path_plot, path_ticks = k_path(bm.primitives, runtime_input["k_points"])
+    energies = band_energies(bm, ks)
+    bandwidth = [minimum(energies), maximum(energies)]
+
+    say("model spin symmetry: $model_symmetry; bare bubble: $method" *
+        (method == :dlr ? " (w_max = $w_max, eps = $dlr_err)" : "") * ", " *
+        (factorized ? "spin-factorized (spinless bubble x 1/2)" : "spinful, $(length(pairs)) channel pairs") *
+        ", basis dimension $d, $(length(ks)) + $(length(path)) momenta on $(Threads.nthreads()) threads")
+
+    mus, fillings, source = resolve_scan_values(runtime_input, beta, energies)
+    runtime_input["scan"] = Dict("source" => source,
+                                 "requested" => get(get(runtime_input, "scan", Dict()), "requested",
+                                                    get(runtime_input, source, Dict())))
+    runtime_input["mus"] = Dict("values" => mus, "n" => length(mus))
+    runtime_input["fillings"] = Dict("values" => fillings, "n" => length(fillings))
     runtime_input_file = runtime_input_path(input)
     mkpath(dirname(runtime_input_file))
     YAML.write_file(runtime_input_file, runtime_input)
+    say("scan: $(length(mus)) point(s), specified as `$source`; mu $(minimum(mus)) .. $(maximum(mus)), " *
+        "filling $(minimum(fillings)) .. $(maximum(fillings))")
 
-    triqs_environment = String(get(input, "triqs_environment",
-                                   get(ENV, "TRIQS_ENVIRONMENT", "python3")))
-    say("TRIQS launcher: $triqs_environment")
+    #####* the stored channel-pair blocks of a full (4d x 4d, channel innermost) or spinless (d x d) bubble
+    block(S, a, b) = factorized ? factor .* S : S[[4(i - 1) + a + 1 for i in 1:d], [4(j - 1) + b + 1 for j in 1:d]]
+    function stack(mats)
+        out = Array{ComplexF64}(undef, length(mats), size(mats[1])...)
+        for (i, M) in enumerate(mats)
+            out[i, :, :] = M
+        end
+        return out
+    end
 
-    # One thread per python process: TRIQS parallelizes with MPI, and threaded BLAS in every rank
-    # would oversubscribe the node.
-    py_env = copy(ENV)
-    py_env["OMP_NUM_THREADS"] = "1"
-    py_env["MKL_NUM_THREADS"] = "1"
-    py_env["OPENBLAS_NUM_THREADS"] = "1"
+    eig_k = band_eigen(model, ks)
+    for (index, mu) in enumerate(mus)
+        start = time()
+        grid = stored_bubble(model, ks, k_size; beta = beta, mu = mu, ops = ops, method = method,
+                             on_grid = true, euv = w_max, rtol = dlr_err, eig_k = eig_k)
+        along = stored_bubble(model, path, k_size; beta = beta, mu = mu, ops = ops, eig_k = eig_k)
 
-    triqs_env_cmd = String.(split(triqs_environment))
-    command = setenv(Cmd(vcat(triqs_env_cmd, [joinpath(@__DIR__, "Bare", "run_bare.py"), runtime_input_file])), py_env)
-    run(command)
+        #####* The pairs S_z conservation says are zero, measured once rather than assumed.
+        if symmetry == "U1z" && index == 1
+            scale = maximum(maximum(abs, S) for S in grid)
+            skipped = [(a, b) for (a, b) in channel_pairs("none") if (a, b) ∉ channel_pairs("U1z")]
+            worst = maximum(maximum(abs, block(S, a, b)) for S in grid for (a, b) in skipped)
+            say("U1z sector check: max |chi| over the $(length(skipped)) skipped channel pairs is $worst against $scale")
+            worst <= 1e-10 * scale ||
+                error("The model has no spin-flip hopping, so the {N, Z} x {X, Y} channel pairs must vanish, but they " *
+                      "reach $(worst / scale) of max |chi|. Set `bubble_spin: full` to keep every pair.")
+        end
+
+        output = Dict{String, Any}()
+        for (a, b) in pairs
+            output[pair_label(a, b)] = stack([block(S, a, b) for S in grid])
+            output[pair_label(a, b) * "_path"] = stack([block(S, a, b) for S in along])
+        end
+        if basis !== nothing
+            output["bilinear_dim"] = [d]
+            output["bilinear_basis"] = stack(basis)
+        end
+        pad(v) = [v[1], v[2], 0.0]
+        b1, b2 = reciprocal_vectors(bm.primitives)
+        merge!(output, Dict{String, Any}(
+            "beta" => [beta], "mu" => [mu], "filling" => [fillings[index]],
+            "bubble_spin_factorized" => [Int(factorized)],
+            "spin_symmetry" => [findfirst(==(symmetry), SPIN_SYMMETRIES) - 1],
+            "primitives" => permutedims(hcat(pad(bm.primitives[1]), pad(bm.primitives[2]))),
+            "reciprocal" => permutedims(hcat(pad(b1), pad(b2), [0.0, 0.0, 2pi])),
+            "ks" => permutedims(reduce(hcat, pad.(ks))), "contracted" => permutedims(reduce(hcat, pad.(ks))),
+            "path" => permutedims(reduce(hcat, pad.(path))), "path_plot" => path_plot, "path_ticks" => path_ticks,
+            "bandwidth" => bandwidth, "bands" => permutedims(band_energies(bm, path))))
+        file = String(input["output"]) * "_beta=$(input["beta"])_mu=$(round(mu, digits = 3)).npz"
+        mkpath(dirname(file))
+        npzwrite(file, output)
+        say("mu = $mu (filling $(round(fillings[index], digits = 6))): bubble written in $(round(time() - start, digits = 1)) s")
+    end
 
     return runtime_input_file
 end
@@ -374,7 +513,7 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
     end
 
     if run_bare
-        say("Running the bare susceptibility calculation in TRIQS (every mu, unconditionally)...")
+        say("Running the bare susceptibility calculation (every mu, unconditionally)...")
         Pipeline.run_bare(config)
         say("Bare susceptibility calculation complete!")
     end
@@ -493,6 +632,7 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
         # Which channel pairs chi holds, and the layout of the interaction matrices beside it.
         entry["spin_symmetry"] = bubble.spin_symmetry
         entry["vertex_slots"] = VERTEX_SLOTS
+        entry["interaction_convention"] = INTERACTION_CONVENTION
         entry["combined_chis"] = bubble.chis
         entry["combined_chis_path"] = bubble.chis_path
         if bubble.chi_basis !== nothing

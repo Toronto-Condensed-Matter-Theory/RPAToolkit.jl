@@ -8,10 +8,12 @@ export dress_primitives, dress_reciprocal, combine_chis, CHI_ORIENTATION
 export get_reciprocal_ks
 
 """
-The convention `combine_chis` returns: chi_ij(q) = <O_i(-q) O_j(q)>, with
-O_p(q) = sum_r e^{-iq.r} c^dag_r M_p c_r = sum_k c^dag_k M_p c_{k+q} in TightBindingToolkit's
-H(k) = sum_R e^{ik.R} t(R) -- the same e^{-iq.r} as `interaction`'s V(q) = sum_δ e^{-iq.δ} V_δ --
-normalised as the PER-SPIN bubble chi0 that the Graser vertices U^(s), U^(c) multiply. Pinned
+The convention `combine_chis` returns: chi_ij(q) is the response of the e^{iq.R} component of O_i to
+a field e^{iq.R} on O_j (R the lattice vectors, in TightBindingToolkit's H(k) = sum_R e^{ik.R} t(R)),
+normalised as the PER-SPIN bubble chi0 that the Graser vertices U^(s), U^(c) multiply. Checked
+against the exact real-space response of a periodic cluster (test/test_rpa_realspace.jl), and the RPA
+it enters, (1 - chi V)^-1 chi with `interaction`'s V(q) (`INTERACTION_CONVENTION`), against the exact
+real-space Hartree RPA. Pinned
 against a brute-force sum in every channel pair, the spin-orbit-coupled ones included
 (test/test_spin_bubble.jl). Until 2026-11-01 this read `sum_k c^dag_{k+q} M_p c_k`, which is O_p(-q);
 the numbers were always the ones above. Consumers store this string beside the chis they write, so a
@@ -88,7 +90,8 @@ spin symmetry the file records ([`stored_spin_symmetry`](@ref); `model_symmetry`
 files written before it was recorded), and a missing one is an error, not a zero.
 
 The whole matrix is TRANSPOSED on the way in, which is what makes a multi-site kernel covariant.
-run_bare.py contracts TRIQS's chi0_abcd with O_i on (a,b) and O_j on (c,d), which gives
+The bare stage stores TRIQS's contraction of chi0_abcd with O_i on (a,b) and O_j on (c,d) -- since
+2026-11 computed in Julia (`stored_bubble`), identical to the TRIQS numbers to 5e-14 -- which gives
 <O_i(q) O_j(-q)>. The RPA ladder of H = 1/2 sum V_pq O_p(q) O_q(-q), and the Cooper form
 factors <u_i|M_p|u_j> that the gap stage pairs with the vertex at q = k_i - k_j, need
 `CHI_ORIENTATION` = <O_i(-q) O_j(q)> = transpose(chi(q)) = chi(-q). Measured 2026-09-25 on

@@ -10,7 +10,7 @@ export load_rpa_input
 Read an RPAToolkit YAML config and fill in its file paths.
 
 Every path is absolute on return. Relative ones (`data_dir`, `output`, `plots`, `interactions`,
-`unitcell.julia`, `unitcell.triqs`, `gap_equation_rpa.rpa_data`) are taken relative to the
+`unitcell.julia`, `gap_equation_rpa.rpa_data`) are taken relative to the
 directory of the YAML file, not the working directory, and `~` is expanded. Missing ones default
 to files in `data_dir` (itself defaulting to the YAML's directory), named after the YAML file
 `<name>.yml`:
@@ -20,7 +20,6 @@ to files in `data_dir` (itself defaulting to the YAML's directory), named after 
 | `output`, `plots`           | `<data_dir>/<name>_` (a file prefix) |
 | `interactions`              | `<data_dir>/<name>_interactions.jld2` (`<name>` from the `name` key if set) |
 | `unitcell.julia`            | `<data_dir>/<name>_dos_scan_data.jld2` |
-| `unitcell.triqs`            | `<data_dir>/<name>_triqs.npz`        |
 | `gap_equation_rpa.rpa_data` | `<data_dir>/<name>_combined_new.jld2`, only if `gap_equation_rpa` exists |
 """
 function load_rpa_input(filepath::AbstractString)
@@ -46,7 +45,6 @@ function load_rpa_input(filepath::AbstractString)
     end
     unitcell = input["unitcell"]
     unitcell["julia"] = resolve(get(unitcell, "julia", joinpath(data_dir, file_prefix * "_dos_scan_data.jld2")))
-    unitcell["triqs"] = resolve(get(unitcell, "triqs", joinpath(data_dir, file_prefix * "_triqs.npz")))
 
     if haskey(input, "gap_equation_rpa")
         gap = input["gap_equation_rpa"]

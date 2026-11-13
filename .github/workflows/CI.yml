@@ -41,4 +41,4 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install numpy
-      - run: python test/test_bilinear_basis.py
+      - run: python test/test_bilinear_basis.py      # numpy only; the TRIQS reference lives in test/triqs_reference

@@ -21,7 +21,7 @@ build_q_grid_maps, which nothing in the pipeline currently validates.
 import os
 import sys
 import numpy as np
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "Bare"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "triqs_reference"))
 import bare_response as br
 from bilinear_basis import (hermitian_basis_closure,
                              lattice_point_group_2d,

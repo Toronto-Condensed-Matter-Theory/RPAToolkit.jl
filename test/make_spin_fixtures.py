@@ -22,7 +22,7 @@ stores the factorized (spinless x 1/2) contraction, which its diagonal pairs mus
 import os
 import sys
 import numpy as np
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "Bare"))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "triqs_reference"))
 import bare_response as br
 import model as mdl
 

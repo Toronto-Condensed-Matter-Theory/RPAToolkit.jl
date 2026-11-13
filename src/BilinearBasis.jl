@@ -6,10 +6,10 @@ export bilinear_closure, density_seed, same_site_seed, lattice_point_group_2d,
        orbital_rep_from_bonds, canonical_frame, conjugation_matrix,
        herm_to_vec, vec_to_herm
 
-# Julia port of src/Bare/bilinear_basis.py. Both exist because the basis is
-# needed at two different points in the pipeline: the interaction builder runs
-# before the _triqs.npz is written, so it cannot read a basis computed in
-# Python, while run_bare needs one to contract the bubble with.
+# Julia port of test/triqs_reference/bilinear_basis.py, the closure the bare
+# stage used while it ran in TRIQS. The bare stage is now Julia (Bubble.jl,
+# `closed_basis_for_model`) and uses this closure directly; the Python one is
+# kept as the reference this is tested against.
 # Both suites assert the same canonical closure dimensions (1, 2, 3, 6 for a
 # single orbital, a permuting pair, an E doublet and ZrNCl_4), so a divergence
 # between them shows up as a test failure on one side.

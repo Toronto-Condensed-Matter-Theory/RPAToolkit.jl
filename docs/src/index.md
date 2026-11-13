@@ -1,10 +1,11 @@
 # RPAToolkit.jl
 
-RPAToolkit.jl computes the static bare susceptibility ``\chi_0(q, \Omega = 0)`` of a tight-binding
-model with [TRIQS](https://triqs.github.io/triqs/latest/) /
-[triqs_tprf](https://triqs.github.io/tprf/latest/). It then solves the random phase
-approximation (RPA) for any set of two-body interactions, to find which interaction strength first
-drives a charge, spin or orbital instability, and at which ordering wavevector.
+RPAToolkit.jl computes the bare susceptibility of a tight-binding model, statically,
+``\chi_0(q, \Omega = 0)``, or at real frequency, ``\chi_0(q, \omega + i\eta)``. It then solves the
+random phase approximation (RPA) for any set of two-body interactions: statically, to find which
+interaction strength first drives a charge, spin or orbital instability and at which ordering
+wavevector; dynamically, to follow collective modes such as magnons and plasmons
+([Collective modes and mean-field theory](@ref)).
 
 Features:
 * Lattices and hoppings are defined with
@@ -20,25 +21,23 @@ Features:
   basis, so ``\chi`` stays covariant.
 * The critical strength, the leading eigenvector and its momentum, the RPA susceptibility, and the
   screened interaction ``V + V \chi_\mathrm{RPA} V`` ([`effective_interaction`](@ref)).
+* The bubble is computed in Julia, threaded: the exact Lindhard sum ([`static_bubble`](@ref)), or an
+  imaginary-time route with FFTs and a discrete Lehmann representation ([`static_bubble_dlr`](@ref),
+  [`dlr_grid`](@ref)) for large grids. Both reproduce what the former TRIQS/triqs_tprf stage stored.
+* The real-frequency bubble ([`dynamic_bubble`](@ref)) and RPA ([`dynamic_rpa`](@ref)), spectral
+  functions unfolded from supercells, and an Ewald-summed ``1/r`` interaction ([`coulomb_2d`](@ref)).
+* Hartree-Fock bands from MeanFieldToolkit.jl, with the TDHF vertex of the same interaction
+  ([`rpa_model`](@ref), [`rpa_vertex`](@ref)).
 
 ## Installation
 
-RPAToolkit has two halves: a Julia package, and the Python scripts that compute the bubble with
-TRIQS.
-
-1. Install [TRIQS](https://triqs.github.io/triqs/latest/install.html) and
-   [triqs_tprf](https://triqs.github.io/tprf/latest/install.html), plus `numpy` and `pyyaml`, in
-   one Python environment.
-2. Add the Julia package:
-   ```julia
-   using Pkg
-   Pkg.add(url = "https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl")
-   ```
-3. Tell RPAToolkit how to launch that Python. Either set the `triqs_environment` key of your
-   config, or export `TRIQS_ENVIRONMENT` (e.g. `python3`, or `mpirun -n 8 python3` to use MPI).
-   With neither set, `python3` from the `PATH` is used.
-
-The Julia half (RPA, interactions, plotting, tests) does not need TRIQS. Only the bare stage does.
+```julia
+using Pkg
+Pkg.add(url = "https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl")
+```
+Everything is Julia. Until version 1.0 the bare stage ran in TRIQS/triqs_tprf; that code is kept in
+`test/triqs_reference/` only to regenerate the test fixtures the Julia bubble is checked against.
+The MeanFieldToolkit interface is a package extension: add MeanFieldToolkit and load it.
 
 ## Quick start
 
@@ -52,5 +51,4 @@ write them and then call `run_rpa`, so the shortest path is
 ```
 julia --project=. -t 4 examples/Square/Square.jl
 ```
-from a checkout of this repository, with TRIQS available. See [Examples](@ref) and
-[Running a calculation](@ref).
+from a checkout of this repository. See [Examples](@ref) and [Running a calculation](@ref).

@@ -2,8 +2,7 @@
 #
 #     julia --project=. -t 4 examples/Square/Square.jl
 #
-# Builds the model and the interactions, runs the bare bubble in TRIQS (see examples/README.md for
-# the TRIQS environment) and then the RPA. Everything is written to examples/Square/data/.
+# Builds the model and the interactions, runs the bare bubble and then the RPA. Everything is written to examples/Square/data/.
 
 using RPAToolkit, TightBindingToolkit, JLD2, LinearAlgebra
 

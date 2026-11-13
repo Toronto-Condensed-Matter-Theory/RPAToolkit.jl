@@ -36,7 +36,7 @@
 
     @testset "V(q) is the lattice sum of 1/r" begin
         q   =   [0.37, -1.21]
-        Vq  =   sum(exp(-1im * dot(q, [x, y])) / hypot(x, y) for x in -3:3, y in -3:3 if 0 < hypot(x, y) <= 2.5)
+        Vq  =   sum(exp(1im * dot(q, [x, y])) / hypot(x, y) for x in -3:3, y in -3:3 if 0 < hypot(x, y) <= 2.5)
         V   =   interaction(1.0, q; kw..., lookup = coulomb)
         ##### physical slots: the tail is charge only, N; the three spin slots hold the same U
         @test V[1, 1] ≈ -(onsite + Vq)

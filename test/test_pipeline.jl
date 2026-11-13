@@ -1,4 +1,4 @@
-##### load_rpa_input, parse_unitcell and run_rpa end to end, on a synthetic bubble (no TRIQS)
+##### load_rpa_input, parse_unitcell and run_rpa end to end, on a synthetic bubble
 
 @testset "pipeline" begin
 
@@ -14,7 +14,6 @@
             @test input["plots"] == joinpath(data, "lattice_")
             @test input["interactions"] == joinpath(dir, "configs", "other", "ints.jld2")
             @test input["unitcell"]["julia"] == joinpath(data, "lattice_dos_scan_data.jld2")
-            @test input["unitcell"]["triqs"] == joinpath(data, "lattice_triqs.npz")
             @test !haskey(input, "gap_equation_rpa")
 
             write(config, "beta: 10.0\ngap_equation_rpa:\n  dos_threshold: 0.05\n")
@@ -66,7 +65,7 @@
             stored(kset)    =   reshape(ComplexF64[chi(k) for k in kset], :, 1, 1)
             bubble  =   Dict{String, Any}("beta" => 10.0, "mu" => 0.0, "filling" => 0.5,
                                           "primitives" => [1.0 0.0; 0.0 1.0],
-                                          "reciprocal" => 2pi .* [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0],   # as TRIQS stores them for a 2D lattice
+                                          "reciprocal" => 2pi .* [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0],   # as the bare stage stores them for a 2D lattice
                                           "ks" => reduce(vcat, permutedims.(ks)), "contracted" => reduce(vcat, permutedims.(ks)),
                                           "path" => reduce(vcat, permutedims.(path)),
                                           "path_plot" => collect(range(0, 1, length = length(path))), "path_ticks" => [0.0, 1.0])

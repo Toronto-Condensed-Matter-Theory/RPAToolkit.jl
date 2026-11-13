@@ -1,4 +1,4 @@
-# The Julia closure must agree with the Python one in src/Bare/bilinear_basis.py.
+# The Julia closure must agree with the Python reference in test/triqs_reference/bilinear_basis.py.
 # These are the same canonical dimensions test_bilinear_basis.py asserts, so the
 # two implementations cannot drift apart without one suite failing.
 @testset "bilinear closure (Julia port)" begin

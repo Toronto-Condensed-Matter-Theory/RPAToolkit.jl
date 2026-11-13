@@ -4,13 +4,13 @@ A calculation is driven by one YAML config and has two stages:
 
 ```
 model .jld2 ─┐
-             ├─ run_bare (TRIQS) ─> one bubble .npz per mu ─┐
+             ├─ run_bare ─────────> one bubble .npz per mu ─┐
 config .yml ─┘                                              ├─ run_rpa ─> combined .jld2
 interactions .jld2 ─────────────────────────────────────────┘
 ```
 
 1. **You** write the model and the interactions, as JLD2 files (below).
-2. [`run_bare`](@ref) computes the bare susceptibility in TRIQS for every chemical potential.
+2. [`run_bare`](@ref) computes the bare susceptibility for every chemical potential.
 3. [`run_rpa`](@ref) finds the critical strength of every interaction case at every chemical
    potential and saves everything in one file.
 
@@ -49,14 +49,11 @@ julia --project=<env> src/Bare/run_bare.jl --input config.yml
 julia --project=<env> -t 16 src/run_RPA.jl --input config.yml [--run_bare true] [--plot_RPA true] [--save_individual true]
 ```
 
-On a cluster, give TRIQS the MPI ranks and Julia the threads, e.g.
-```
-export TRIQS_ENVIRONMENT="mpirun -n 64 python3"
-julia --project=<env> -t 64 src/run_RPA.jl --input config.yml --run_bare true
-```
-Under MPI, TRIQS spreads each bubble's momenta over the ranks. Without MPI, the bare stage spreads
-the chemical potentials over Python processes. The RPA stage runs its (chemical potential, case)
-pairs on Julia threads, each pair serial over momenta.
+Both stages use Julia threads (`julia -t N`): the bare stage spreads each bubble's momenta over
+them (and FFTW its transforms, with `bubble: dlr`); the RPA stage runs its (chemical potential,
+case) pairs on them, each pair serial over momenta. Keep BLAS single-threaded
+(`BLAS.set_num_threads(1)`), as the scripts do. For grids beyond `k_size` ≈ 100, `bubble: dlr`
+is much faster than the exact Lindhard sum, at an accuracy set by `dlr_err`.
 
 ## Config reference
 
@@ -76,11 +73,9 @@ can carry keys for other tools (the examples carry `coulomb:` for their own inte
 | `plots` | optional | prefix of plots. Default `<data_dir>/<name>_`. |
 | `interactions` | optional | the interactions file. Default `<data_dir>/<name>_interactions.jld2`. |
 | `unitcell.julia` | optional | the model file. Default `<data_dir>/<name>_dos_scan_data.jld2`. |
-| `unitcell.triqs` | optional | the model in TRIQS form, written by `run_bare`. Default `<data_dir>/<name>_triqs.npz`. |
 | `instability.lower`, `.upper` | optional | the bisection bracket for the critical strength. Default `[0, 10]`. |
 | `strengths.lower`, `.upper`, `.n` | optional | strengths at which `plot = true` draws ``\chi_\mathrm{RPA}``. Default `0, 10, 6`. |
-| `triqs_environment` | optional | the Python launcher, e.g. `mpirun -n 8 python3`. Default: `$TRIQS_ENVIRONMENT`, else `python3`. |
-| `bubble` | optional | `lindhard` (default; the exact Matsubara sum, ``O(N_k^2)``) or `dlr` (imaginary-time FFT bubble, roughly linear in ``N_k``; uses `w_max`, default 20, and `dlr_err`, default 1e-12) |
+| `bubble` | optional | `lindhard` (default; the exact Matsubara sum, ``O(N_k^2)``, [`static_bubble`](@ref)) or `dlr` (the imaginary-time FFT bubble on a discrete Lehmann representation, ``O(N_k \log N_k)``, [`static_bubble_dlr`](@ref); `w_max`, default 20, is its spectral cutoff and must exceed the band span; `dlr_err`, default 1e-12, its accuracy) |
 | `bubble_spin` | optional | `auto` (default; the spinless bubble without spin-orbit coupling, and only the channel pairs the model's spin symmetry allows, see [Spin-orbit coupling and spin sectors](@ref)) or `full` (the spinful bubble and all sixteen channel pairs) |
 | `bilinear_basis` | optional | `per_orbital` (default) or `closed`. Must match the interaction builder. |
 | `bilinear_seed` | optional | for `closed`: `kanamori` (default; densities plus on-site off-diagonal bilinears) or `density` |
@@ -91,9 +86,8 @@ can carry keys for other tools (the examples carry `coulomb:` for their own inte
 
 | file | written by | contents |
 |:-----|:-----------|:---------|
-| `unitcell.triqs` | `run_bare` | the hoppings in TRIQS form ([`parse_unitcell`](@ref)) |
 | `<output>_runtime_input.yml` | `run_bare` | the resolved config: absolute paths, k-points as coordinates, and the scan as both `mus.values` and `fillings.values`. `run_rpa` reads the chemical potentials from here. |
-| `<output>_beta=<beta>_mu=<mu>.npz` | `run_bare` | one bubble: `chi_NN`, `chi_XX`, `chi_YY`, `chi_ZZ` on the grid `ks` (shape `n_q x d x d`), and with spin-orbit coupling the off-diagonal pairs `chi_NZ`, `chi_XY`, ... ([`pair_label`](@ref)); the same with `_path` along the k-path (interpolated from the grid); `spin_symmetry` (the index into [`SPIN_SYMMETRIES`](@ref)); plus `beta`, `mu`, `filling`, `primitives`, `reciprocal`, `path`, `path_plot`, `path_ticks`, `bands` (along the path) and `bandwidth`. On the closed basis also `bilinear_basis`. |
+| `<output>_beta=<beta>_mu=<mu>.npz` | `run_bare` | one bubble: `chi_NN`, `chi_XX`, `chi_YY`, `chi_ZZ` on the grid `ks` (shape `n_q x d x d`), and with spin-orbit coupling the off-diagonal pairs `chi_NZ`, `chi_XY`, ... ([`pair_label`](@ref)); the same with `_path` along the k-path (computed on the path itself); `spin_symmetry` (the index into [`SPIN_SYMMETRIES`](@ref)); plus `beta`, `mu`, `filling`, `primitives`, `reciprocal`, `path`, `path_plot`, `path_ticks`, `bands` (along the path) and `bandwidth`. On the closed basis also `bilinear_basis`. |
 | [`rpa_output_path`](@ref) | `run_rpa` | the combined output, below |
 
 ## The combined output
@@ -103,7 +97,7 @@ A `Dict` with one entry per chemical potential, keyed `"beta=<beta>_mu=<mu>"`, e
 | key | contents |
 |:----|:---------|
 | `"mu"`, `"beta"`, `"filling"` | the point of the scan |
-| `"triqs_data"` | the bubble `.npz`, as read |
+| `"triqs_data"` | the bubble `.npz`, as read (the key keeps its historical name) |
 | `"combined_chis"`, `"combined_chis_path"` | ``\chi(q)`` on the grid and along the path, one `4d x 4d` matrix per momentum ([`combine_chis`](@ref)) |
 | `"chi_orientation"` | the convention of those matrices ([`CHI_ORIENTATION`](@ref)) |
 | `"spin_symmetry"` | `"SU2"`, `"U1z"` or `"none"`: which channel pairs ``\chi`` holds, and the sectors the RPA was solved in ([`spin_sectors`](@ref)) |
