@@ -6,21 +6,17 @@ export bilinear_closure, density_seed, same_site_seed, lattice_point_group_2d,
        orbital_rep_from_bonds, canonical_frame, conjugation_matrix,
        herm_to_vec, vec_to_herm
 
-# Julia port of test/triqs_reference/bilinear_basis.py, the closure the bare
-# stage used while it ran in TRIQS. The bare stage is now Julia (Bubble.jl,
-# `closed_basis_for_model`) and uses this closure directly; the Python one is
-# kept as the reference this is tested against.
-# Both suites assert the same canonical closure dimensions (1, 2, 3, 6 for a
-# single orbital, a permuting pair, an E doublet and ZrNCl_4), so a divergence
-# between them shows up as a test failure on one side.
+# The closure is built twice for one calculation: by the bare stage
+# (Bubble.jl, `closed_basis_for_model`), which contracts the bubble onto it,
+# and by the interaction builder, which projects the vertex onto it. The tests
+# assert the canonical closure dimensions (1, 2, 3, 6 for a single orbital, a
+# permuting pair, an E doublet and ZrNCl_4).
 #
-# The two implementations must agree on the BASIS, not only on its dimension:
-# the bubble is contracted onto the Python basis and the vertex is projected
-# onto the Julia one, and coefficients in two different frames of the same span
-# are not comparable. An SVD frame is not enough for that -- the span fixes it
+# The two must agree on the BASIS, not only on its dimension: coefficients in
+# two different frames of the same span are not comparable. An SVD frame is not enough for that -- the span fixes it
 # only up to an orthogonal rotation, and degenerate singular values make even a
 # single implementation's choice arbitrary. canonical_frame below fixes the
-# frame from the span alone, so both sides land on the same matrices.
+# frame from the span alone, so both builds land on the same matrices.
 # run_RPA.jl still measures the residual rotation between the two and applies
 # it, so a future divergence is corrected rather than silently mis-projected.
 
@@ -206,7 +202,7 @@ function bilinear_closure(Ds::AbstractVector{<:AbstractMatrix}, n_orb::Int;
         rank == size(V, 2) && break
         V = F.U[:, 1:rank]
     end
-    # Canonicalised, so this agrees matrix-for-matrix with the Python closure
+    # Canonicalised, so two builds of the same span agree matrix-for-matrix
     # rather than only subspace-for-subspace. See the note at the top.
     Vc = canonical_frame(Matrix{Float64}(V))
     return [vec_to_herm(view(Vc, :, k), n_orb) for k in axes(Vc, 2)]
@@ -266,8 +262,8 @@ function orbital_rep_from_bonds(bonds::AbstractVector, Fs::AbstractVector{<:Abst
         push!(rows, kron(I_n, j > 0 ? Fs[j] : zero_n) - kron(transpose(F), I_n))
     end
     dec = svd(reduce(vcat, rows))
-    # No transpose here: numpy reshapes row-major and then transposes, Julia
-    # reshapes column-major, so the two agree with the transpose dropped.
+    # The null vector is vec(D) (column-major, the vec of kron(I, A) - kron(B^T, I)),
+    # so a column-major reshape gives D itself, with no transpose.
     D = Matrix(reshape(conj(dec.V[:, end]), n, n))
     Usvd, _, Vsvd = svd(D)                # nearest unitary: U * V'
     D = Usvd * Vsvd'

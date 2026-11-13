@@ -97,7 +97,7 @@ A `Dict` with one entry per chemical potential, keyed `"beta=<beta>_mu=<mu>"`, e
 | key | contents |
 |:----|:---------|
 | `"mu"`, `"beta"`, `"filling"` | the point of the scan |
-| `"triqs_data"` | the bubble `.npz`, as read (the key keeps its historical name) |
+| `"bare_data"` | the bubble `.npz`, as read (`"triqs_data"` in files written before version 1.1) |
 | `"combined_chis"`, `"combined_chis_path"` | ``\chi(q)`` on the grid and along the path, one `4d x 4d` matrix per momentum ([`combine_chis`](@ref)) |
 | `"chi_orientation"` | the convention of those matrices ([`CHI_ORIENTATION`](@ref)) |
 | `"spin_symmetry"` | `"SU2"`, `"U1z"` or `"none"`: which channel pairs ``\chi`` holds, and the sectors the RPA was solved in ([`spin_sectors`](@ref)) |
@@ -106,7 +106,7 @@ A `Dict` with one entry per chemical potential, keyed `"beta=<beta>_mu=<mu>"`, e
 | `"<case>"` | the [`find_instability`](@ref) result: `"critical strength"`, the `"unstable sector"`, and at that strength the minimum/maximum eigenvalues of ``\chi_\mathrm{RPA}``, their eigenvectors, and the momenta they sit at |
 | `"bilinear_basis"`, `"basis_dim"` | on the closed basis only |
 
-The grid momenta are `output[key]["triqs_data"]["contracted"]` (Cartesian, one row per momentum).
+The grid momenta are `output[key]["bare_data"]["contracted"]` (Cartesian, one row per momentum).
 With these, anything else is a few lines. For example, the RPA susceptibility and the screened
 interaction along the path at strength `s`:
 ```julia

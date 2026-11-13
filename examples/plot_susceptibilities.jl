@@ -22,7 +22,7 @@ upper = Float64(get(get(input, "instability", Dict()), "upper", 10.0))
 cases = String[]
 for (key, data) in output
     mu = round(data["mu"], digits = 3)
-    path = (path_plot = data["triqs_data"]["path_plot"], path_ticks = data["triqs_data"]["path_ticks"],
+    path = (path_plot = data["bare_data"]["path_plot"], path_ticks = data["bare_data"]["path_ticks"],
             path_labels = labels)
 
     p = plot_chi(data["combined_chis_path"]; path..., title = L"\chi_0(Q)" * ", μ = $mu")

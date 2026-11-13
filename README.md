@@ -16,7 +16,7 @@ Currently supported:
 * For multi-orbital models whose orbitals rotate into each other under the point group, the susceptibility and the Kanamori vertex can be put on a symmetry-closed bilinear basis.
 * Spin-orbit coupling: the bubble keeps every channel pair the model's spin symmetry allows (all sixteen in general, the {N, Z} and {X, Y} sectors with Ising coupling), and the RPA is solved one spin sector at a time. Without spin-orbit coupling the spinless bubble is used.
 * Outputs include the critical strength, the leading instability and its momentum, the RPA susceptibility, and the screened interaction.
-* The bare bubble is computed in Julia, threaded: the exact Lindhard sum, or an imaginary-time FFT route on a discrete Lehmann representation that scales as `N_k log N_k`, for large grids. Both reproduce the TRIQS/triqs_tprf numbers the package used to rely on.
+* The bare bubble is computed in Julia, threaded: the exact Lindhard sum, or an imaginary-time FFT route on a discrete Lehmann representation that scales as `N_k log N_k`, for large grids.
 * Real-frequency RPA: the retarded bubble `χ₀(q, ω + iη)`, the RPA at every frequency, spectral functions unfolded from supercells, and an Ewald-summed long-range Coulomb `V(q)` for two-dimensional plasmons.
 * On top of [MeanFieldToolkit.jl](https://github.com/Toronto-Condensed-Matter-Theory/MeanFieldToolkit.jl) Hartree-Fock bands (a package extension): the RPA with the vertex built from the same interaction is time-dependent Hartree-Fock, with exact Goldstone modes in broken-symmetry states.
 
@@ -24,9 +24,8 @@ Currently supported:
 
 `] add https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl`
 
-Everything is Julia. (Up to version 1.0 the bare bubble was computed with TRIQS; that code is kept in
-`test/triqs_reference/` only to regenerate the test fixtures.) For the mean-field extension, also add
-MeanFieldToolkit and `using MeanFieldToolkit` next to `using RPAToolkit`.
+Everything is Julia. For the mean-field extension, also add MeanFieldToolkit and
+`using MeanFieldToolkit` next to `using RPAToolkit`.
 
 ## Examples
 

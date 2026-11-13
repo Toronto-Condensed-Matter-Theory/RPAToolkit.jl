@@ -1,14 +1,14 @@
-##### The Julia bare bubble (src/Bubble.jl, src/DLR.jl) against the committed TRIQS fixtures, and the
-##### real-frequency bubble against the static one.
+##### The bare bubble (src/Bubble.jl, src/DLR.jl) against the committed fixtures, and the real-frequency
+##### bubble against the static one.
 #####
-##### The fixtures were written by the TRIQS stage this replaced (test/make_fixtures.py,
-##### test/make_spin_fixtures.py), so agreement here is agreement with what that stage stored.
+##### The fixtures are reference bubbles from an independent implementation (the bare stage of RPAToolkit up
+##### to 1.0, generator in the git history), in the stored convention.
 
 const I2 = Matrix{ComplexF64}(I, 2, 2)
 const HEX2 = [[1.0, 0.0], [-0.5, sqrt(3) / 2]]
 const SQ2 = [[1.0, 0.0], [0.0, 1.0]]
 
-##### the four fixture models, as test/make_fixtures.py built them (spin inner, every bond's conjugate)
+##### the four fixture models (spin inner, every bond's conjugate)
 fixture_hop_square(t = 1.0) = Dict([1, 0] => -t * I2, [-1, 0] => -t * I2, [0, 1] => -t * I2, [0, -1] => -t * I2)
 fixture_hop_triangular(t = 0.4) = Dict(o => -t * I2 for o in ([1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1]))
 function fixture_hop_honeycomb(t = 0.3)
@@ -43,7 +43,7 @@ sorted_spectrum(M) = sort(real(eigvals(Hermitian(0.5 .* (M + M')))))
 
 @testset "Julia bare bubble" begin
 
-    @testset "grid and path match TRIQS's mesh and k_space_path" begin
+    @testset "grid and path match the fixtures' mesh and the closed-path layout" begin
         f = load_spin_fixture("ising")
         bm = band_model(f.units, f.hoppings)
         n = isqrt(length(f.ks))

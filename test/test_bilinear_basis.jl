@@ -1,12 +1,11 @@
-# The Julia closure must agree with the Python reference in test/triqs_reference/bilinear_basis.py.
-# These are the same canonical dimensions test_bilinear_basis.py asserts, so the
-# two implementations cannot drift apart without one suite failing.
-@testset "bilinear closure (Julia port)" begin
+# The symmetry-closed bilinear basis: its canonical dimensions, the vertex support it must hold,
+# and a frame fixed by the span alone.
+@testset "bilinear closure" begin
     rot2(d) = (t = deg2rad(d); [cos(t) -sin(t); sin(t) cos(t)])
     c6v = vcat([[rot2(60k), rot2(60k) * Diagonal([1.0, -1.0])] for k in 0:5]...)
     swap = ComplexF64[0 1; 1 0]
 
-    @testset "dimensions match the python implementation" begin
+    @testset "canonical dimensions" begin
         @test length(bilinear_closure([Matrix{ComplexF64}(I, 1, 1)], 1)) == 1
         @test length(bilinear_closure(Matrix{ComplexF64}[I(2), swap], 2)) == 2
         @test length(bilinear_closure(Matrix{ComplexF64}.(c6v), 2)) == 3
@@ -77,9 +76,10 @@
         @test uncovered_bilinears(Us, bilinear_closure(blocks, 4)) > 0.5
     end
 
-    # The two implementations must agree on the BASIS, not only on its
-    # dimension: chi is contracted in Python and the vertex projected here, and
-    # coefficients in two frames of one span are not comparable. An SVD frame
+    # Two builds of the closure must agree on the BASIS, not only on its
+    # dimension: chi is contracted onto the bare stage's and the vertex projected
+    # onto the interaction builder's, and coefficients in two frames of one span
+    # are not comparable. An SVD frame
     # does not give that -- within a degenerate singular value the choice is
     # arbitrary -- so the closure is canonicalised.
     @testset "canonical frame" begin

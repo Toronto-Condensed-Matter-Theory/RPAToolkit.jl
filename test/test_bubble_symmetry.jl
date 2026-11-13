@@ -1,8 +1,7 @@
 # Symmetry invariants of the bare bubble and its per-orbital contraction.
 #
-# Runs against the small stored fixtures in test/fixtures. Regenerate them with
-# test/make_fixtures.py (needs TRIQS); the tests themselves need neither TRIQS
-# nor any stored run data.
+# Runs against the small stored fixtures in test/fixtures: reference bubbles computed by an independent
+# implementation (the bare stage of RPAToolkit up to 1.0; its generator is in the git history).
 #
 # The fixtures span the cases that behave differently under the point group:
 #

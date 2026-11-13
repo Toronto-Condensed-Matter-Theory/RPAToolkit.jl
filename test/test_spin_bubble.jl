@@ -1,8 +1,8 @@
 # The bubble with spin-orbit coupling: every channel pair, against a brute-force sum.
 #
-# Runs against the spin fixtures in test/fixtures (test/make_spin_fixtures.py, needs TRIQS once):
-# single-site models whose spinful bubble was contracted onto all sixteen channel pairs with the
-# functions run_bare.py uses. Here H(k) is rebuilt from the stored hoppings, in TightBindingToolkit's
+# Runs against the spin fixtures in test/fixtures (reference bubbles from the bare stage of RPAToolkit up
+# to 1.0, an independent implementation): single-site models whose spinful bubble was contracted onto
+# all sixteen channel pairs. Here H(k) is rebuilt from the stored hoppings, in TightBindingToolkit's
 # convention H(k) = sum_R e^{ik.R} t(R), and
 #
 #     chi_{mu nu}(q) = 2 <O_mu(-q) O_nu(q)>,   O_mu(q) = sum_r e^{-iq.r} c^dag_r (sigma^mu / 2) c_r

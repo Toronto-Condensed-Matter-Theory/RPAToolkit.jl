@@ -142,8 +142,7 @@ The bare-susceptibility stage.
 Reads the model's `"unit cell"` from `unitcell.julia` and, for every chemical potential of the scan
 (`mus`, or `fillings` inverted once on the bands), computes the static bubble on the
 `k_size × k_size` grid and along the closed path through `k_points`. Writes one
-`<output>_beta=<beta>_mu=<mu>.npz` per mu, in the layout and convention the TRIQS stage wrote
-([`stored_bubble`](@ref)), and the resolved config (k-points as coordinates, the resolved `mus`
+`<output>_beta=<beta>_mu=<mu>.npz` per mu, in the stored layout and convention ([`stored_bubble`](@ref)), and the resolved config (k-points as coordinates, the resolved `mus`
 and `fillings` under `scan.source`) to `<output>_runtime_input.yml`, which it returns.
 
 Config keys: `bubble` (`lindhard`, the exact sum and the default, or `dlr`, the imaginary-time FFT
@@ -338,12 +337,12 @@ function npzread_numeric(path)
     return data
 end
 
-function npz_path_labels(triqs_data)
-    if !haskey(triqs_data, "k_point_labels")
+function npz_path_labels(bare_data)
+    if !haskey(bare_data, "k_point_labels")
         return nothing
     end
 
-    labels = vec(triqs_data["k_point_labels"])
+    labels = vec(bare_data["k_point_labels"])
     path_labels = [L"%$(String(label))" for label in labels]
     if !isempty(path_labels)
         push!(path_labels, path_labels[1])
@@ -384,40 +383,40 @@ end
 #####* one mu's bubble, assembled into the block matrices the RPA multiplies
 function load_bubble(input, mu, localDim, subs, model_symmetry)
     parent_label = "beta=$(input["beta"])_mu=$(round(mu, digits=3))"
-    triqs_data = npzread_numeric(input["output"] * "_$(parent_label).npz")
+    bare_data = npzread_numeric(input["output"] * "_$(parent_label).npz")
 
     # Which channel pairs the bubble holds. Contracted under less symmetry than the model has is
     # fine (bubble_spin: full); under more means it came from a different model.
-    symmetry = stored_spin_symmetry(triqs_data; model_symmetry = model_symmetry)
+    symmetry = stored_spin_symmetry(bare_data; model_symmetry = model_symmetry)
     level(sym) = findfirst(==(sym), ("SU2", "U1z", "none"))
     level(symmetry) >= level(model_symmetry) ||
         error("The bubble at $parent_label was contracted as $symmetry, but the model is " *
               "$model_symmetry: it holds too few channel pairs for this model. Rerun the bare stage.")
 
-    ks_contracted = triqs_data["contracted"]
+    ks_contracted = bare_data["contracted"]
     ks = Vector{eltype(ks_contracted)}[eachrow(ks_contracted)...]
-    ks_path_matrix = triqs_data["path"]
+    ks_path_matrix = bare_data["path"]
     ks_path = Vector{eltype(ks_path_matrix)}[eachrow(ks_path_matrix)...]
 
-    # The basis run_bare.py contracted this bubble onto. Absent on the per-orbital path, where
+    # The basis the bare stage contracted this bubble onto. Absent on the per-orbital path, where
     # the block size is the orbital count.
-    chi_basis = let stored = get(triqs_data, "bilinear_basis", nothing)
+    chi_basis = let stored = get(bare_data, "bilinear_basis", nothing)
         (stored === nothing || size(stored, 1) == 0) ? nothing :
             [Matrix{ComplexF64}(stored[k, :, :]) for k in axes(stored, 1)]
     end
     chi_dim = chi_basis === nothing ? subs : length(chi_basis)
 
-    chis = combine_chis(triqs_data; directions = input["directions"], subs = chi_dim,
+    chis = combine_chis(bare_data; directions = input["directions"], subs = chi_dim,
                         model_symmetry = model_symmetry)
-    chis_path = combine_chis(triqs_data; directions = input["directions"], subs = chi_dim, suffix = "_path",
+    chis_path = combine_chis(bare_data; directions = input["directions"], subs = chi_dim, suffix = "_path",
                              model_symmetry = model_symmetry)
     size(chis[begin], 1) == localDim * chi_dim ||
         error("assembled chi at $parent_label is $(size(chis[begin], 1))x$(size(chis[begin], 1)) " *
               "but the stored basis has dimension $chi_dim over $localDim directions, which " *
               "requires $(localDim * chi_dim). The bubble file and its basis disagree.")
 
-    return (mu = mu, parent_label = parent_label, triqs_data = triqs_data,
-            primitives = dress_primitives(triqs_data), ks = ks, ks_path = ks_path,
+    return (mu = mu, parent_label = parent_label, bare_data = bare_data,
+            primitives = dress_primitives(bare_data), ks = ks, ks_path = ks_path,
             chi_basis = chi_basis, chi_dim = chi_dim, chis = chis, chis_path = chis_path,
             spin_symmetry = symmetry)
 end
@@ -439,7 +438,7 @@ The (mu, case) pairs run in parallel over Julia threads (`julia -t N`); each pai
 momenta. Keep BLAS single-threaded (`BLAS.set_num_threads(1)`) so the two do not oversubscribe.
 
 The output has one entry per mu, keyed `"beta=<beta>_mu=<mu>"`, holding `"mu"`, `"beta"`,
-`"filling"`, `"triqs_data"` (the bubble file), `"combined_chis"` and `"combined_chis_path"` (from
+`"filling"`, `"bare_data"` (the bubble file), `"combined_chis"` and `"combined_chis_path"` (from
 [`combine_chis`](@ref)), `"chi_orientation"`, `"spin_symmetry"` (the channel pairs chi holds, see
 [`spin_sectors`](@ref)), `"vertex_slots"`, `"<case>_interaction"` and `"<case>_interaction_path"`
 (the unit-strength `V(q)`), and `"<case>"` (the `find_instability` result, with the
@@ -623,9 +622,9 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
         entry = CombinedOutput[bubble.parent_label] = Dict()
         entry["mu"] = bubble.mu
         entry["beta"] = input["beta"]
-        entry["filling"] = Float64(only(bubble.triqs_data["filling"]))
-        entry["triqs_data"] = bubble.triqs_data
-        # combine_chis transposes TRIQS's contraction into the ordering the RPA ladder and the
+        entry["filling"] = Float64(only(bubble.bare_data["filling"]))
+        entry["bare_data"] = bubble.bare_data
+        # combine_chis transposes the stored contraction into the ordering the RPA ladder and the
         # Cooper form factors need (see its docstring); recorded so a consumer can refuse output
         # assembled under an older convention.
         entry["chi_orientation"] = CHI_ORIENTATION
@@ -659,12 +658,12 @@ function run_rpa(config::AbstractString; run_bare::Bool = false, plot::Bool = fa
             isempty(strengths) &&
                 say("No plotting strengths are <= critical for $(label) at mu = $(bubble.mu). " *
                     "Check the strengths range in the config.")
-            path_labels = something(npz_path_labels(bubble.triqs_data), input_path_labels)
+            path_labels = something(npz_path_labels(bubble.bare_data), input_path_labels)
             mkpath(dirname(input["plots"]))
             for strength in strengths
                 p = plot_chi(bubble.chis_path, [strength .* V for V in unit_interactions[c].V_path];
-                             path_plot = bubble.triqs_data["path_plot"],
-                             path_ticks = bubble.triqs_data["path_ticks"],
+                             path_plot = bubble.bare_data["path_plot"],
+                             path_ticks = bubble.bare_data["path_ticks"],
                              path_labels = path_labels)
                 savefig(p, input["plots"] * "_chi_$(bubble.parent_label)_interactionID=$(label)_strength=$(round(strength, digits=3)).png")
             end

@@ -23,7 +23,7 @@ Features:
   screened interaction ``V + V \chi_\mathrm{RPA} V`` ([`effective_interaction`](@ref)).
 * The bubble is computed in Julia, threaded: the exact Lindhard sum ([`static_bubble`](@ref)), or an
   imaginary-time route with FFTs and a discrete Lehmann representation ([`static_bubble_dlr`](@ref),
-  [`dlr_grid`](@ref)) for large grids. Both reproduce what the former TRIQS/triqs_tprf stage stored.
+  [`dlr_grid`](@ref)) for large grids.
 * The real-frequency bubble ([`dynamic_bubble`](@ref)) and RPA ([`dynamic_rpa`](@ref)), spectral
   functions unfolded from supercells, and an Ewald-summed ``1/r`` interaction ([`coulomb_2d`](@ref)).
 * Hartree-Fock bands from MeanFieldToolkit.jl, with the TDHF vertex of the same interaction
@@ -35,8 +35,6 @@ Features:
 using Pkg
 Pkg.add(url = "https://github.com/Toronto-Condensed-Matter-Theory/RPAToolkit.jl")
 ```
-Everything is Julia. Until version 1.0 the bare stage ran in TRIQS/triqs_tprf; that code is kept in
-`test/triqs_reference/` only to regenerate the test fixtures the Julia bubble is checked against.
 The MeanFieldToolkit interface is a package extension: add MeanFieldToolkit and load it.
 
 ## Quick start

@@ -9,9 +9,8 @@ filled in), with the Bloch Hamiltonian in the periodic gauge,
 
     H(k) = sum_R t(R) e^{i k.R},      R a lattice vector (no basis offsets),
 
-which is TightBindingToolkit's convention (`BondDisplacements`), the one `interaction()` builds V(q)
-in, and the one TRIQS's TBLattice used when the bare stage ran there. No gauge phases are needed
-anywhere.
+which is TightBindingToolkit's convention (`BondDisplacements`) and the one `interaction()` builds
+V(q) in. No gauge phases are needed anywhere.
 
 The kernel is the Lindhard sum over band pairs (m at k, n at k - q), for operators O_p,
 
@@ -22,9 +21,8 @@ The kernel is the Lindhard sum over band pairs (m at k, n at k - q), for operato
 [`static_bubble`](@ref) and [`dynamic_bubble`](@ref)'s internals compute exactly this. Statically
 raw(-q) = transpose(raw(q)) (the isothermal susceptibility is symmetric in its two operators).
 
-What the bare stage STORES, pair by pair, is what TRIQS stored: TPRF's chi0_abcd contracted with
-O_i on (a, b) and O_j on (c, d). Measured against the old TRIQS stage on every fixture and on a
-two-site cell through the real pipeline (TBT UnitCell -> parse_unitcell -> TRIQS), to 5e-14:
+What the bare stage STORES, pair by pair, is the orbital bubble chi0_abcd contracted with O_i on
+(a, b) and O_j on (c, d), which is
 
     stored(q) = transpose(raw(q) computed with the TRANSPOSED operators O_p^T)
 
@@ -176,8 +174,7 @@ end
     k_grid(primitives, n) -> Vector{Vector{Float64}}
 
 The `n × n` Monkhorst-Pack-free grid ``k = (i b_1 + j b_2)/n``, ``i, j = 0 … n-1``, with `j`
-running fastest: the order of TRIQS's Brillouin-zone mesh, so grid index `n i + j + 1` is the same
-momentum it was.
+running fastest, so grid index `n i + j + 1` is momentum `(i, j)`.
 """
 function k_grid(primitives, n::Integer)
     b1, b2 = reciprocal_vectors(primitives)
@@ -188,8 +185,8 @@ end
     k_path(primitives, points; num = 100) -> (ks, distance, ticks)
 
 The closed path through `points` (reduced coordinates, in units of the reciprocal vectors) and
-back to the first, `num` points per segment with both ends included, as TRIQS's `k_space_path`
-built it: Cartesian momenta, the distance travelled at each, and the distance at each corner.
+back to the first, `num` points per segment with both ends included: Cartesian momenta, the
+distance travelled at each, and the distance at each corner.
 """
 function k_path(primitives, points; num::Integer = 100)
     b1, b2 = reciprocal_vectors(primitives)
@@ -662,7 +659,7 @@ end
                       eig_k = nothing) -> Vector{Matrix{ComplexF64}}
 
 The same bubble as [`static_bubble`](@ref) on its own `k_size × k_size` grid (in [`k_grid`](@ref)
-order), by the imaginary-time route TPRF's `imtime_bubble_chi0_wk` takes:
+order), by the imaginary-time route:
 
     raw_ij(q) = int_0^beta dtau sum_R e^{-iq.R} Tr[P(R, tau) O_j Q(-R, tau) O_i],
     P(k, tau) = U diag(e^{xi tau} f) U',   Q(k, tau) = U diag(e^{-xi tau} (1 - f)) U',
@@ -756,8 +753,8 @@ transposed_ops(ops) = [collect(transpose(O)) for O in ops]
     stored_bubble(bm, qs, k_size; beta, mu, ops, method = :lindhard, on_grid = false,
                   euv = 20.0, rtol = 1e-12) -> Vector{Matrix{ComplexF64}}
 
-The bubble in the convention the bare stage writes to disk (the one TRIQS wrote, see the module
-notes): `transpose(raw)` with the operators transposed. `method = :dlr` needs `on_grid = true`.
+The bubble in the convention the bare stage writes to disk (see the module notes):
+`transpose(raw)` with the operators transposed. `method = :dlr` needs `on_grid = true`.
 """
 function stored_bubble(bm::BandModel, qs::AbstractVector, k_size::Integer; beta::Real, mu::Real, ops,
                        method::Symbol = :lindhard, on_grid::Bool = false, euv::Real = 20.0,

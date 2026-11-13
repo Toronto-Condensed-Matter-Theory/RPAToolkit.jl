@@ -58,7 +58,7 @@ function load_fixture(name)
     end
     return (chi_NN = chi("NN"), chi_ZZ = chi("ZZ"),
             chiC_NN = chiC("NN"), chiC_ZZ = chiC("ZZ"), n_basis = nb,
-            perm = Int.(table[:, col["perm3"]]) .+ 1,   # python 0-based -> julia
+            perm = Int.(table[:, col["perm3"]]) .+ 1,   # stored 0-based
             bands = bands, n_q = n_q,
             tau_equal = get(meta, "tau_equal", "1") == "1")
 end

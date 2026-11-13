@@ -90,9 +90,8 @@ spin symmetry the file records ([`stored_spin_symmetry`](@ref); `model_symmetry`
 files written before it was recorded), and a missing one is an error, not a zero.
 
 The whole matrix is TRANSPOSED on the way in, which is what makes a multi-site kernel covariant.
-The bare stage stores TRIQS's contraction of chi0_abcd with O_i on (a,b) and O_j on (c,d) -- since
-2026-11 computed in Julia (`stored_bubble`), identical to the TRIQS numbers to 5e-14 -- which gives
-<O_i(q) O_j(-q)>. The RPA ladder of H = 1/2 sum V_pq O_p(q) O_q(-q), and the Cooper form
+The bare stage stores the contraction of chi0_abcd with O_i on (a,b) and O_j on (c,d)
+(`stored_bubble`), which gives <O_i(q) O_j(-q)>. The RPA ladder of H = 1/2 sum V_pq O_p(q) O_q(-q), and the Cooper form
 factors <u_i|M_p|u_j> that the gap stage pairs with the vertex at q = k_i - k_j, need
 `CHI_ORIENTATION` = <O_i(-q) O_j(q)> = transpose(chi(q)) = chi(-q). Measured 2026-09-25 on
 ZrNCl_4 against an independent Lindhard sum: the stored chi is that transpose to 7.8e-10.
@@ -105,7 +104,7 @@ the adjoint, and of the WHOLE 4d x 4d matrix: channel block (b, a) of the result
 transpose of the stored (a, b) pair, which only coincides with transposing each block in place
 on the diagonal.
 
-Each block is also DOUBLED. run_bare.py contracts with S = M (x) sigma/2, so what it stores is
+Each block is also DOUBLED. The bare stage contracts with S = M (x) sigma/2, so what it stores is
 <S S> = chi0 / 2 in every channel, where chi0 is the per-spin bubble. The vertices are Graser's
 U^(s), U^(c), which multiply chi0 itself: the single-orbital Stoner point is U chi0 = 1, and a
 density-density V is screened as V / (1 + 2 V chi0). Fed chi0 / 2, the RPA put the Stoner point

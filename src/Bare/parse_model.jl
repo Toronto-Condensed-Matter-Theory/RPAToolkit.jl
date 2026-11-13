@@ -10,7 +10,7 @@ export parse_unitcell
     parse_unitcell(uc::UnitCell, fileName)
 
 The hopping model of a TightBindingToolkit `UnitCell` in serialized form (the bare stage's `BandModel` and
-`spin_symmetry` are built from it, as the TRIQS stage once was):
+`spin_symmetry` are built from it):
 `"units"` (primitives, padded to 3D, as columns), `"orbital_positions"` (one column per
 spin-orbital), and `"hopping matrices"` / `"hopping offsets"` with every bond's Hermitian
 conjugate filled in at the opposite offset. With a `fileName`, writes it as an `.npz`.

@@ -17,8 +17,7 @@ vectors, in TightBindingToolkit's ``H(k) = \sum_R e^{ik\cdot R} t(R)``). The int
 the same Bloch convention, ``V_{ij}(q) = \sum M e^{+iq\cdot\delta}`` per bond
 ([`INTERACTION_CONVENTION`](@ref)), which is what makes ``(1 - \chi V)^{-1}\chi`` the RPA. Both are
 checked against an exact real-space Hartree RPA on a periodic cluster.
-That is a plain transpose, of the whole matrix, of what the bare stage stores (TPRF's contraction, which the
-Julia bubble reproduces: [`stored_bubble`](@ref) is the transpose of the Lindhard sum with the operators
+That is a plain transpose, of the whole matrix, of what the bare stage stores ([`stored_bubble`](@ref) is the transpose of the Lindhard sum with the operators
 transposed), normalized as
 the per-spin bubble ``\chi_0`` of Graser et al., NJP **11**, 025016 (2009) (twice what is stored). [`CHI_ORIENTATION`](@ref) names this convention, and `run_rpa` records it
 in its output. The static bubble is positive semidefinite.

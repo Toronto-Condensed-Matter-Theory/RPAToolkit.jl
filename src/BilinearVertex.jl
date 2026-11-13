@@ -115,9 +115,9 @@ end
 `O[p, q]` with `source[q] = sum_p O[p, q] target[p]`: the real orthogonal
 change of frame between two orthonormal Hermitian bases of the SAME span.
 
-The bubble is contracted onto a basis built in Python and the vertex is
-projected onto one built in Julia. Both closures are canonicalised so they
-agree, but "agree" has to be measured rather than assumed: coefficients in two
+The bubble is contracted onto the basis the bare stage built and the vertex is
+projected onto the one the interaction builder built. Both closures are
+canonicalised so they agree, but "agree" has to be measured rather than assumed: coefficients in two
 different frames of one subspace are not comparable, and nothing downstream
 would notice. This returns the rotation that makes them comparable, and errors
 when the two spans differ -- `O` is orthogonal exactly then.
