@@ -40,6 +40,8 @@ for U in Us
     @printf("\n=== U = %.1f t ===\n", U)
     mft = neel_hubbard(; U, t, kSize = K_HF)
     residual, iterations = solve!(mft, [0.5, 0, 0, 0.9, 0.5, 0, 0, -0.9])
+    ##### an order parameter is the coefficient of its matrix in the on-site density matrix, tr(Sz G) / tr(Sz²),
+    ##### so the Sz channel holds 2⟨Sz⟩ = n↑ - n↓, the staggered moment m (and the n channel holds n / 2)
     m = real(order_parameters(mft)["site 1 : Sz"])
     r = rpa_model(mft; residual = residual)
     V = rpa_vertex(mft)

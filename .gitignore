@@ -10,3 +10,4 @@ __pycache__/
 *.h5
 examples/*/data/
 examples/*/Manifest.toml
+docs/readme/Manifest.toml
