@@ -157,6 +157,18 @@ function resolve_scan_values(params, model::Model)
 end
 
 """
+    mu_label(mu) -> String
+
+The `mu` in the bubble file names and output keys, `"beta=<beta>_mu=<mu_label(mu)>"`: six significant
+digits, so chemical potentials a fraction of a meV apart in a narrow band stay distinct. (Rounding to
+three decimals, as before, merged the scan points of a 35 meV-wide band in eV into a handful of keys.)
+"""
+mu_label(mu) = string(round(Float64(mu), sigdigits = 6))
+
+"""The label of bubble files written before [`mu_label`](@ref): `mu` rounded to three decimals."""
+legacy_mu_label(mu) = string(round(Float64(mu), digits = 3))
+
+"""
     run_bare(config) -> String
 
 The bare-susceptibility stage.
@@ -229,6 +241,10 @@ function run_bare(config::AbstractString)
         ", basis dimension $d, $(length(ks)) + $(length(path)) momenta on $(Threads.nthreads()) threads")
 
     mus, fillings, source = resolve_scan_values(runtime_input, free)
+    labels = mu_label.(mus)
+    allunique(labels) || error("Two scan points share the file label mu = " *
+        "$(first(l for l in labels if count(==(l), labels) > 1)); their bubbles would overwrite each other. " *
+        "Space the scan points further apart.")
     runtime_input["scan"] = Dict("source" => source,
                                  "requested" => get(get(runtime_input, "scan", Dict()), "requested",
                                                     get(runtime_input, source, Dict())))
@@ -288,7 +304,7 @@ function run_bare(config::AbstractString)
             "ks" => permutedims(reduce(hcat, pad.(ks))), "contracted" => permutedims(reduce(hcat, pad.(ks))),
             "path" => permutedims(reduce(hcat, pad.(path))), "path_plot" => path_plot, "path_ticks" => path_ticks,
             "bandwidth" => bandwidth, "bands" => permutedims(band_energies(bm, path))))
-        file = String(input["output"]) * "_beta=$(input["beta"])_mu=$(round(mu, digits = 3)).npz"
+        file = String(input["output"]) * "_beta=$(input["beta"])_mu=$(mu_label(mu)).npz"
         mkpath(dirname(file))
         npzwrite(file, output)
         say("mu = $mu (filling $(round(fillings[index], digits = 6))): bubble written in $(round(time() - start, digits = 1)) s")
@@ -404,8 +420,13 @@ end
 
 #####* one mu's bubble, assembled into the block matrices the RPA multiplies
 function load_bubble(input, mu, localDim, subs, model_symmetry)
-    parent_label = "beta=$(input["beta"])_mu=$(round(mu, digits=3))"
-    bare_data = npzread_numeric(input["output"] * "_$(parent_label).npz")
+    parent_label = "beta=$(input["beta"])_mu=$(mu_label(mu))"
+    file = input["output"] * "_$(parent_label).npz"
+    if !isfile(file)        # a bubble from before mu_label: three decimals
+        legacy = input["output"] * "_beta=$(input["beta"])_mu=$(legacy_mu_label(mu)).npz"
+        isfile(legacy) && (file = legacy)
+    end
+    bare_data = npzread_numeric(file)
 
     # Which channel pairs the bubble holds. Contracted under less symmetry than the model has is
     # fine (bubble_spin: full); under more means it came from a different model.
