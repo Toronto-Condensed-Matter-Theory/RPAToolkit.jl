@@ -203,7 +203,7 @@ sorted_spectrum(M) = sort(real(eigvals(Hermitian(0.5 .* (M + M')))))
             again = YAML.load_file(run_bare(runtime))
             @test again["mus"]["values"] == mus
             for mu in mus
-                data = npzread(input["output"] * "_beta=10.0_mu=$(RPAToolkit.mu_label(mu)).npz")
+                data = npzread(input["output"] * "_beta=10.0_mu=$(RPAToolkit.Pipeline.mu_label(mu)).npz")
                 @test Int(only(data["spin_symmetry"])) == 0 && Int(only(data["bubble_spin_factorized"])) == 1
                 @test size(data["chi_NN"]) == (64, 1, 1) && size(data["chi_ZZ_path"], 1) == size(data["path"], 1)
                 chis = combine_chis(data; directions = [0, 1, 2, 3])
